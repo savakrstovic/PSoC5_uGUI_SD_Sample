@@ -1,0 +1,5004 @@
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqwyLbK.s 			page 1
+
+
+   1              		.syntax unified
+   2              		.cpu cortex-m3
+   3              		.fpu softvfp
+   4              		.eabi_attribute 20, 1
+   5              		.eabi_attribute 21, 1
+   6              		.eabi_attribute 23, 3
+   7              		.eabi_attribute 24, 1
+   8              		.eabi_attribute 25, 1
+   9              		.eabi_attribute 26, 1
+  10              		.eabi_attribute 30, 1
+  11              		.eabi_attribute 34, 1
+  12              		.eabi_attribute 18, 4
+  13              		.thumb
+  14              		.syntax unified
+  15              		.file	"sdcard.c"
+  16              		.text
+  17              	.Ltext0:
+  18              		.cfi_sections	.debug_frame
+  19              		.section	.text.xmit_mmc,"ax",%progbits
+  20              		.align	2
+  21              		.thumb
+  22              		.thumb_func
+  23              		.type	xmit_mmc, %function
+  24              	xmit_mmc:
+  25              	.LFB63:
+  26              		.file 1 "FatFs_Library\\sdcard.c"
+   1:FatFs_Library/sdcard.c **** /*------------------------------------------------------------------------/
+   2:FatFs_Library/sdcard.c **** /  Foolproof MMCv3/SDv1/SDv2 (in SPI mode) control module
+   3:FatFs_Library/sdcard.c **** /-------------------------------------------------------------------------/
+   4:FatFs_Library/sdcard.c **** /
+   5:FatFs_Library/sdcard.c **** /  Copyright (C) 2013, ChaN, all right reserved.
+   6:FatFs_Library/sdcard.c **** /
+   7:FatFs_Library/sdcard.c **** / * This software is a free software and there is NO WARRANTY.
+   8:FatFs_Library/sdcard.c **** / * No restriction on use. You can use, modify and redistribute it for
+   9:FatFs_Library/sdcard.c **** /   personal, non-profit or commercial products UNDER YOUR RESPONSIBILITY.
+  10:FatFs_Library/sdcard.c **** / * Redistributions of source code must retain the above copyright notice.
+  11:FatFs_Library/sdcard.c **** /
+  12:FatFs_Library/sdcard.c **** /-------------------------------------------------------------------------/
+  13:FatFs_Library/sdcard.c ****   Features and Limitations:
+  14:FatFs_Library/sdcard.c **** 
+  15:FatFs_Library/sdcard.c ****   * Easy to Port Bit-banging SPI
+  16:FatFs_Library/sdcard.c ****     It uses only four GPIO pins. No complex peripheral needs to be used.
+  17:FatFs_Library/sdcard.c **** 
+  18:FatFs_Library/sdcard.c ****   * No Media Change Detection
+  19:FatFs_Library/sdcard.c ****     Application program needs to perform a f_mount() after media change.
+  20:FatFs_Library/sdcard.c **** 
+  21:FatFs_Library/sdcard.c **** /-------------------------------------------------------------------------*/
+  22:FatFs_Library/sdcard.c **** 
+  23:FatFs_Library/sdcard.c **** 
+  24:FatFs_Library/sdcard.c **** #include "diskio.h"		/* Common include file for FatFs and disk I/O layer */
+  25:FatFs_Library/sdcard.c **** 
+  26:FatFs_Library/sdcard.c **** 
+  27:FatFs_Library/sdcard.c **** /*-------------------------------------------------------------------------*/
+  28:FatFs_Library/sdcard.c **** /* Platform dependent macros and functions needed to be modified           */
+  29:FatFs_Library/sdcard.c **** /*-------------------------------------------------------------------------*/
+  30:FatFs_Library/sdcard.c **** 
+  31:FatFs_Library/sdcard.c **** #include <project.h>
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqwyLbK.s 			page 2
+
+
+  32:FatFs_Library/sdcard.c **** #include <cytypes.h>
+  33:FatFs_Library/sdcard.c **** 
+  34:FatFs_Library/sdcard.c ****     /* Put here the same name of the SPI bus module you have used in schematic. */
+  35:FatFs_Library/sdcard.c **** #define SPI_NAME                SPI  
+  36:FatFs_Library/sdcard.c ****     /* Put here function used to control SPI SS line.
+  37:FatFs_Library/sdcard.c ****        Example: 
+  38:FatFs_Library/sdcard.c ****         - if using Cypress API macros: SPI_ss0_m_Write
+  39:FatFs_Library/sdcard.c ****         - if using another gpio pint: SPI_SS_Write. */
+  40:FatFs_Library/sdcard.c **** //#define mmSPI_SS_Write(value)   SPI_ss0_m_Write(value)
+  41:FatFs_Library/sdcard.c **** #define mmSPI_SS_Write(value)     SPI_SS_Write(value)        
+  42:FatFs_Library/sdcard.c **** 
+  43:FatFs_Library/sdcard.c **** #define CS_DELAY_US             1
+  44:FatFs_Library/sdcard.c **** #define M_DELAY_US              10
+  45:FatFs_Library/sdcard.c **** 
+  46:FatFs_Library/sdcard.c ****     /* Text substitution macros to avoid changing function names related to SPI API
+  47:FatFs_Library/sdcard.c ****        if SPI module name is changed in schematic. */
+  48:FatFs_Library/sdcard.c **** 
+  49:FatFs_Library/sdcard.c **** #define CONCATENATE(name, function)                 CONCAT(name, function)
+  50:FatFs_Library/sdcard.c **** #define CONCAT(name, function)                      name##function
+  51:FatFs_Library/sdcard.c **** 
+  52:FatFs_Library/sdcard.c **** #if (CY_PSOC4)
+  53:FatFs_Library/sdcard.c **** 
+  54:FatFs_Library/sdcard.c ****     #define mmSPI_SpiUartClearTxBuffer                  CONCATENATE(SPI_NAME, _SpiUartClearTxBuffer
+  55:FatFs_Library/sdcard.c ****     #define mmSPI_SpiUartClearRxBuffer                  CONCATENATE(SPI_NAME, _SpiUartClearRxBuffer
+  56:FatFs_Library/sdcard.c ****     #define mmSPI_SpiUartPutArray(a, b)                 CONCATENATE(SPI_NAME, _SpiUartPutArray(a, b
+  57:FatFs_Library/sdcard.c ****     #define mmSPI_SpiUartWriteTxData(value)             CONCATENATE(SPI_NAME, _SpiUartWriteTxData(v
+  58:FatFs_Library/sdcard.c ****     #define mmSPI_SpiUartReadRxData                     CONCATENATE(SPI_NAME, _SpiUartReadRxData)
+  59:FatFs_Library/sdcard.c ****     #define mmSPI_GetMasterInterruptSource              CONCATENATE(SPI_NAME, _GetMasterInterruptSo
+  60:FatFs_Library/sdcard.c ****     #define mmSPI_ClearMasterInterruptSource(value)     CONCATENATE(SPI_NAME, _ClearMasterInterrupt
+  61:FatFs_Library/sdcard.c ****     #define mmSPI_INTR_MASTER_SPI_DONE                  CONCATENATE(SPI_NAME, _INTR_MASTER_SPI_DONE
+  62:FatFs_Library/sdcard.c ****     
+  63:FatFs_Library/sdcard.c **** #endif    
+  64:FatFs_Library/sdcard.c **** 
+  65:FatFs_Library/sdcard.c **** #if (CY_PSOC5LP) 
+  66:FatFs_Library/sdcard.c ****     #define mmSPI_SpiUartClearTxBuffer                  CONCATENATE(SPI_NAME, _ClearTxBuffer)
+  67:FatFs_Library/sdcard.c ****     #define mmSPI_SpiUartClearRxBuffer                  CONCATENATE(SPI_NAME, _ClearRxBuffer)    
+  68:FatFs_Library/sdcard.c ****     #define mmSPI_SpiUartPutArray(a, b)                 CONCATENATE(SPI_NAME, _PutArray(a, b)) 
+  69:FatFs_Library/sdcard.c ****     #define mmSPI_SpiUartWriteTxData(value)             CONCATENATE(SPI_NAME, _WriteTxData(value))
+  70:FatFs_Library/sdcard.c ****     #define mmSPI_SpiUartReadRxData                     CONCATENATE(SPI_NAME, _ReadRxData)
+  71:FatFs_Library/sdcard.c ****     #define mmSPI_GetMasterInterruptSource              CONCATENATE(SPI_NAME, _GetMasterInterruptSo
+  72:FatFs_Library/sdcard.c ****     #define mmSPI_ClearMasterInterruptSource(value)     CONCATENATE(SPI_NAME, _ClearMasterInterrupt
+  73:FatFs_Library/sdcard.c ****     #define mmSPI_INTR_MASTER_SPI_DONE                  CONCATENATE(SPI_NAME, _INTR_MASTER_SPI_DONE
+  74:FatFs_Library/sdcard.c **** #endif 
+  75:FatFs_Library/sdcard.c **** 
+  76:FatFs_Library/sdcard.c ****     /* Delays. */
+  77:FatFs_Library/sdcard.c **** #define dly_us(n)               CyDelayUs(n); /* Delay n microseconds. */
+  78:FatFs_Library/sdcard.c **** 
+  79:FatFs_Library/sdcard.c **** /*--------------------------------------------------------------------------
+  80:FatFs_Library/sdcard.c **** 
+  81:FatFs_Library/sdcard.c ****    Module Private Functions
+  82:FatFs_Library/sdcard.c **** 
+  83:FatFs_Library/sdcard.c **** ---------------------------------------------------------------------------*/
+  84:FatFs_Library/sdcard.c **** 
+  85:FatFs_Library/sdcard.c **** /* MMC/SD command (SPI mode) */
+  86:FatFs_Library/sdcard.c **** #define CMD0	(0)			/* GO_IDLE_STATE */
+  87:FatFs_Library/sdcard.c **** #define CMD1	(1)			/* SEND_OP_COND */
+  88:FatFs_Library/sdcard.c **** #define	ACMD41	(0x80+41)	/* SEND_OP_COND (SDC) */
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqwyLbK.s 			page 3
+
+
+  89:FatFs_Library/sdcard.c **** #define CMD8	(8)			/* SEND_IF_COND */
+  90:FatFs_Library/sdcard.c **** #define CMD9	(9)			/* SEND_CSD */
+  91:FatFs_Library/sdcard.c **** #define CMD10	(10)		/* SEND_CID */
+  92:FatFs_Library/sdcard.c **** #define CMD12	(12)		/* STOP_TRANSMISSION */
+  93:FatFs_Library/sdcard.c **** #define CMD13	(13)		/* SEND_STATUS */
+  94:FatFs_Library/sdcard.c **** #define ACMD13	(0x80+13)	/* SD_STATUS (SDC) */
+  95:FatFs_Library/sdcard.c **** #define CMD16	(16)		/* SET_BLOCKLEN */
+  96:FatFs_Library/sdcard.c **** #define CMD17	(17)		/* READ_SINGLE_BLOCK */
+  97:FatFs_Library/sdcard.c **** #define CMD18	(18)		/* READ_MULTIPLE_BLOCK */
+  98:FatFs_Library/sdcard.c **** #define CMD23	(23)		/* SET_BLOCK_COUNT */
+  99:FatFs_Library/sdcard.c **** #define	ACMD23	(0x80+23)	/* SET_WR_BLK_ERASE_COUNT (SDC) */
+ 100:FatFs_Library/sdcard.c **** #define CMD24	(24)		/* WRITE_BLOCK */
+ 101:FatFs_Library/sdcard.c **** #define CMD25	(25)		/* WRITE_MULTIPLE_BLOCK */
+ 102:FatFs_Library/sdcard.c **** #define CMD32	(32)		/* ERASE_ER_BLK_START */
+ 103:FatFs_Library/sdcard.c **** #define CMD33	(33)		/* ERASE_ER_BLK_END */
+ 104:FatFs_Library/sdcard.c **** #define CMD38	(38)		/* ERASE */
+ 105:FatFs_Library/sdcard.c **** #define CMD55	(55)		/* APP_CMD */
+ 106:FatFs_Library/sdcard.c **** #define CMD58	(58)		/* READ_OCR */
+ 107:FatFs_Library/sdcard.c **** 
+ 108:FatFs_Library/sdcard.c **** 
+ 109:FatFs_Library/sdcard.c **** static DSTATUS Stat = STA_NOINIT;	/* Disk status */
+ 110:FatFs_Library/sdcard.c **** 
+ 111:FatFs_Library/sdcard.c **** static BYTE CardType;			/* b0:MMC, b1:SDv1, b2:SDv2, b3:Block addressing */
+ 112:FatFs_Library/sdcard.c **** 
+ 113:FatFs_Library/sdcard.c **** /*-----------------------------------------------------------------------*/
+ 114:FatFs_Library/sdcard.c **** /* Transmit bytes to the card                                            */
+ 115:FatFs_Library/sdcard.c **** /*-----------------------------------------------------------------------*/
+ 116:FatFs_Library/sdcard.c **** 
+ 117:FatFs_Library/sdcard.c **** static void xmit_mmc(const BYTE* buff, UINT bc)
+ 118:FatFs_Library/sdcard.c **** {
+  27              		.loc 1 118 0
+  28              		.cfi_startproc
+  29              		@ args = 0, pretend = 0, frame = 0
+  30              		@ frame_needed = 0, uses_anonymous_args = 0
+  31              	.LVL0:
+  32 0000 70B5     		push	{r4, r5, r6, lr}
+  33              		.cfi_def_cfa_offset 16
+  34              		.cfi_offset 4, -16
+  35              		.cfi_offset 5, -12
+  36              		.cfi_offset 6, -8
+  37              		.cfi_offset 14, -4
+  38 0002 0646     		mov	r6, r0
+  39 0004 0D46     		mov	r5, r1
+ 119:FatFs_Library/sdcard.c **** 
+ 120:FatFs_Library/sdcard.c **** #if (CY_PSOC4)
+ 121:FatFs_Library/sdcard.c **** 
+ 122:FatFs_Library/sdcard.c ****     mmSPI_SpiUartClearTxBuffer();
+ 123:FatFs_Library/sdcard.c ****     mmSPI_SpiUartClearRxBuffer();
+ 124:FatFs_Library/sdcard.c ****     mmSPI_SpiUartPutArray(buff, bc);
+ 125:FatFs_Library/sdcard.c **** 
+ 126:FatFs_Library/sdcard.c ****     while(0u == (mmSPI_GetMasterInterruptSource() & mmSPI_INTR_MASTER_SPI_DONE));
+ 127:FatFs_Library/sdcard.c ****     
+ 128:FatFs_Library/sdcard.c **** #endif
+ 129:FatFs_Library/sdcard.c **** 
+ 130:FatFs_Library/sdcard.c **** #if (CY_PSOC5LP)
+ 131:FatFs_Library/sdcard.c ****     
+ 132:FatFs_Library/sdcard.c ****     UINT loop;
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqwyLbK.s 			page 4
+
+
+ 133:FatFs_Library/sdcard.c ****     
+ 134:FatFs_Library/sdcard.c ****     SPI_ClearTxBuffer();
+  40              		.loc 1 134 0
+  41 0006 FFF7FEFF 		bl	SPI_ClearTxBuffer
+  42              	.LVL1:
+ 135:FatFs_Library/sdcard.c ****     SPI_ClearRxBuffer();
+  43              		.loc 1 135 0
+  44 000a FFF7FEFF 		bl	SPI_ClearRxBuffer
+  45              	.LVL2:
+ 136:FatFs_Library/sdcard.c ****     
+ 137:FatFs_Library/sdcard.c ****     for (loop = 0; loop < bc; loop++)
+  46              		.loc 1 137 0
+  47 000e 0024     		movs	r4, #0
+  48 0010 03E0     		b	.L2
+  49              	.LVL3:
+  50              	.L3:
+ 138:FatFs_Library/sdcard.c ****         SPI_WriteTxData(buff[loop]);
+  51              		.loc 1 138 0 discriminator 3
+  52 0012 305D     		ldrb	r0, [r6, r4]	@ zero_extendqisi2
+  53 0014 FFF7FEFF 		bl	SPI_WriteTxData
+  54              	.LVL4:
+ 137:FatFs_Library/sdcard.c ****         SPI_WriteTxData(buff[loop]);
+  55              		.loc 1 137 0 discriminator 3
+  56 0018 0134     		adds	r4, r4, #1
+  57              	.LVL5:
+  58              	.L2:
+ 137:FatFs_Library/sdcard.c ****         SPI_WriteTxData(buff[loop]);
+  59              		.loc 1 137 0 is_stmt 0 discriminator 1
+  60 001a AC42     		cmp	r4, r5
+  61 001c F9D3     		bcc	.L3
+  62              	.L4:
+ 139:FatFs_Library/sdcard.c ****     
+ 140:FatFs_Library/sdcard.c ****     while (SPI_GetTxBufferSize()) {};
+  63              		.loc 1 140 0 is_stmt 1 discriminator 1
+  64 001e FFF7FEFF 		bl	SPI_GetTxBufferSize
+  65              	.LVL6:
+  66 0022 0028     		cmp	r0, #0
+  67 0024 FBD1     		bne	.L4
+ 141:FatFs_Library/sdcard.c ****     
+ 142:FatFs_Library/sdcard.c **** #endif    
+ 143:FatFs_Library/sdcard.c **** }
+  68              		.loc 1 143 0
+  69 0026 70BD     		pop	{r4, r5, r6, pc}
+  70              		.cfi_endproc
+  71              	.LFE63:
+  72              		.size	xmit_mmc, .-xmit_mmc
+  73              		.section	.text.rcvr_mmc,"ax",%progbits
+  74              		.align	2
+  75              		.thumb
+  76              		.thumb_func
+  77              		.type	rcvr_mmc, %function
+  78              	rcvr_mmc:
+  79              	.LFB64:
+ 144:FatFs_Library/sdcard.c **** 
+ 145:FatFs_Library/sdcard.c **** 
+ 146:FatFs_Library/sdcard.c **** 
+ 147:FatFs_Library/sdcard.c **** /*-----------------------------------------------------------------------*/
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqwyLbK.s 			page 5
+
+
+ 148:FatFs_Library/sdcard.c **** /* Receive bytes from the card                                           */
+ 149:FatFs_Library/sdcard.c **** /*-----------------------------------------------------------------------*/
+ 150:FatFs_Library/sdcard.c **** 
+ 151:FatFs_Library/sdcard.c **** static void rcvr_mmc(BYTE *buff, UINT bc)
+ 152:FatFs_Library/sdcard.c **** {
+  80              		.loc 1 152 0
+  81              		.cfi_startproc
+  82              		@ args = 0, pretend = 0, frame = 0
+  83              		@ frame_needed = 0, uses_anonymous_args = 0
+  84              	.LVL7:
+  85 0000 70B5     		push	{r4, r5, r6, lr}
+  86              		.cfi_def_cfa_offset 16
+  87              		.cfi_offset 4, -16
+  88              		.cfi_offset 5, -12
+  89              		.cfi_offset 6, -8
+  90              		.cfi_offset 14, -4
+  91 0002 0546     		mov	r5, r0
+  92 0004 0C46     		mov	r4, r1
+ 153:FatFs_Library/sdcard.c **** 
+ 154:FatFs_Library/sdcard.c **** #if (CY_PSOC4) 
+ 155:FatFs_Library/sdcard.c ****     
+ 156:FatFs_Library/sdcard.c ****     mmSPI_SpiUartClearTxBuffer();
+ 157:FatFs_Library/sdcard.c ****     mmSPI_SpiUartClearRxBuffer();
+ 158:FatFs_Library/sdcard.c ****     
+ 159:FatFs_Library/sdcard.c ****     do
+ 160:FatFs_Library/sdcard.c ****     {
+ 161:FatFs_Library/sdcard.c **** 
+ 162:FatFs_Library/sdcard.c ****         mmSPI_SpiUartWriteTxData(0xFF);
+ 163:FatFs_Library/sdcard.c ****         while(0u == (mmSPI_GetMasterInterruptSource() & mmSPI_INTR_MASTER_SPI_DONE));
+ 164:FatFs_Library/sdcard.c ****         CyDelayUs(M_DELAY_US); // <*> adjust, why?
+ 165:FatFs_Library/sdcard.c ****         *buff++ = (BYTE)mmSPI_SpiUartReadRxData();
+ 166:FatFs_Library/sdcard.c **** 
+ 167:FatFs_Library/sdcard.c ****     } while (--bc);   
+ 168:FatFs_Library/sdcard.c ****     
+ 169:FatFs_Library/sdcard.c **** #endif    
+ 170:FatFs_Library/sdcard.c ****     
+ 171:FatFs_Library/sdcard.c **** #if (CY_PSOC5LP)
+ 172:FatFs_Library/sdcard.c ****     
+ 173:FatFs_Library/sdcard.c ****     SPI_ClearTxBuffer();
+  93              		.loc 1 173 0
+  94 0006 FFF7FEFF 		bl	SPI_ClearTxBuffer
+  95              	.LVL8:
+ 174:FatFs_Library/sdcard.c ****     SPI_ClearRxBuffer();
+  96              		.loc 1 174 0
+  97 000a FFF7FEFF 		bl	SPI_ClearRxBuffer
+  98              	.LVL9:
+  99 000e 00E0     		b	.L8
+ 100              	.LVL10:
+ 101              	.L9:
+ 175:FatFs_Library/sdcard.c ****     
+ 176:FatFs_Library/sdcard.c ****     do
+ 177:FatFs_Library/sdcard.c ****     {
+ 178:FatFs_Library/sdcard.c **** 
+ 179:FatFs_Library/sdcard.c ****         SPI_WriteTxData(0xFF);
+ 180:FatFs_Library/sdcard.c ****         while (SPI_GetTxBufferSize()) {};
+ 181:FatFs_Library/sdcard.c ****         CyDelayUs(M_DELAY_US); // <*> adjust, why?
+ 182:FatFs_Library/sdcard.c ****         *buff++ = (BYTE)SPI_ReadRxData();
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqwyLbK.s 			page 6
+
+
+ 102              		.loc 1 182 0
+ 103 0010 3546     		mov	r5, r6
+ 104              	.LVL11:
+ 105              	.L8:
+ 179:FatFs_Library/sdcard.c ****         while (SPI_GetTxBufferSize()) {};
+ 106              		.loc 1 179 0
+ 107 0012 FF20     		movs	r0, #255
+ 108 0014 FFF7FEFF 		bl	SPI_WriteTxData
+ 109              	.LVL12:
+ 110              	.L7:
+ 180:FatFs_Library/sdcard.c ****         CyDelayUs(M_DELAY_US); // <*> adjust, why?
+ 111              		.loc 1 180 0 discriminator 1
+ 112 0018 FFF7FEFF 		bl	SPI_GetTxBufferSize
+ 113              	.LVL13:
+ 114 001c 0028     		cmp	r0, #0
+ 115 001e FBD1     		bne	.L7
+ 181:FatFs_Library/sdcard.c ****         *buff++ = (BYTE)SPI_ReadRxData();
+ 116              		.loc 1 181 0
+ 117 0020 0A20     		movs	r0, #10
+ 118 0022 FFF7FEFF 		bl	CyDelayUs
+ 119              	.LVL14:
+ 120              		.loc 1 182 0
+ 121 0026 6E1C     		adds	r6, r5, #1
+ 122              	.LVL15:
+ 123 0028 FFF7FEFF 		bl	SPI_ReadRxData
+ 124              	.LVL16:
+ 125 002c 2870     		strb	r0, [r5]
+ 126              	.LVL17:
+ 183:FatFs_Library/sdcard.c **** 
+ 184:FatFs_Library/sdcard.c ****     } while (--bc);    
+ 127              		.loc 1 184 0
+ 128 002e 013C     		subs	r4, r4, #1
+ 129              	.LVL18:
+ 130 0030 EED1     		bne	.L9
+ 185:FatFs_Library/sdcard.c ****     
+ 186:FatFs_Library/sdcard.c **** #endif        
+ 187:FatFs_Library/sdcard.c **** 
+ 188:FatFs_Library/sdcard.c **** }
+ 131              		.loc 1 188 0
+ 132 0032 70BD     		pop	{r4, r5, r6, pc}
+ 133              		.cfi_endproc
+ 134              	.LFE64:
+ 135              		.size	rcvr_mmc, .-rcvr_mmc
+ 136              		.section	.text.wait_ready,"ax",%progbits
+ 137              		.align	2
+ 138              		.thumb
+ 139              		.thumb_func
+ 140              		.type	wait_ready, %function
+ 141              	wait_ready:
+ 142              	.LFB65:
+ 189:FatFs_Library/sdcard.c **** 
+ 190:FatFs_Library/sdcard.c **** 
+ 191:FatFs_Library/sdcard.c **** 
+ 192:FatFs_Library/sdcard.c **** /*-----------------------------------------------------------------------*/
+ 193:FatFs_Library/sdcard.c **** /* Wait for card ready                                                   */
+ 194:FatFs_Library/sdcard.c **** /*-----------------------------------------------------------------------*/
+ 195:FatFs_Library/sdcard.c **** 
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqwyLbK.s 			page 7
+
+
+ 196:FatFs_Library/sdcard.c **** static int wait_ready(void)	/* 1:OK, 0:Timeout */
+ 197:FatFs_Library/sdcard.c **** {
+ 143              		.loc 1 197 0
+ 144              		.cfi_startproc
+ 145              		@ args = 0, pretend = 0, frame = 8
+ 146              		@ frame_needed = 0, uses_anonymous_args = 0
+ 147 0000 10B5     		push	{r4, lr}
+ 148              		.cfi_def_cfa_offset 8
+ 149              		.cfi_offset 4, -8
+ 150              		.cfi_offset 14, -4
+ 151 0002 82B0     		sub	sp, sp, #8
+ 152              		.cfi_def_cfa_offset 16
+ 153              	.LVL19:
+ 198:FatFs_Library/sdcard.c **** 	BYTE d;
+ 199:FatFs_Library/sdcard.c **** 	UINT tmr;
+ 200:FatFs_Library/sdcard.c **** 
+ 201:FatFs_Library/sdcard.c **** 	for (tmr = 5000; tmr; tmr--) {	/* Wait for ready in timeout of 500ms */
+ 154              		.loc 1 201 0
+ 155 0004 41F28834 		movw	r4, #5000
+ 156 0008 0CE0     		b	.L12
+ 157              	.LVL20:
+ 158              	.L14:
+ 202:FatFs_Library/sdcard.c **** 		rcvr_mmc(&d, 1);
+ 159              		.loc 1 202 0
+ 160 000a 0121     		movs	r1, #1
+ 161 000c 0DF10700 		add	r0, sp, #7
+ 162 0010 FFF7FEFF 		bl	rcvr_mmc
+ 163              	.LVL21:
+ 203:FatFs_Library/sdcard.c **** 		if (d == 0xFF) break;
+ 164              		.loc 1 203 0
+ 165 0014 9DF80730 		ldrb	r3, [sp, #7]	@ zero_extendqisi2
+ 166 0018 FF2B     		cmp	r3, #255
+ 167 001a 05D0     		beq	.L13
+ 204:FatFs_Library/sdcard.c **** 		dly_us(100);
+ 168              		.loc 1 204 0 discriminator 2
+ 169 001c 6420     		movs	r0, #100
+ 170 001e FFF7FEFF 		bl	CyDelayUs
+ 171              	.LVL22:
+ 201:FatFs_Library/sdcard.c **** 		rcvr_mmc(&d, 1);
+ 172              		.loc 1 201 0 discriminator 2
+ 173 0022 013C     		subs	r4, r4, #1
+ 174              	.LVL23:
+ 175              	.L12:
+ 201:FatFs_Library/sdcard.c **** 		rcvr_mmc(&d, 1);
+ 176              		.loc 1 201 0 is_stmt 0 discriminator 1
+ 177 0024 002C     		cmp	r4, #0
+ 178 0026 F0D1     		bne	.L14
+ 179              	.L13:
+ 205:FatFs_Library/sdcard.c **** 	}
+ 206:FatFs_Library/sdcard.c **** 
+ 207:FatFs_Library/sdcard.c **** 	return tmr ? 1 : 0;
+ 208:FatFs_Library/sdcard.c **** }
+ 180              		.loc 1 208 0 is_stmt 1
+ 181 0028 201C     		adds	r0, r4, #0
+ 182 002a 18BF     		it	ne
+ 183 002c 0120     		movne	r0, #1
+ 184 002e 02B0     		add	sp, sp, #8
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqwyLbK.s 			page 8
+
+
+ 185              		.cfi_def_cfa_offset 8
+ 186              		@ sp needed
+ 187 0030 10BD     		pop	{r4, pc}
+ 188              		.cfi_endproc
+ 189              	.LFE65:
+ 190              		.size	wait_ready, .-wait_ready
+ 191 0032 00BF     		.section	.text.rcvr_datablock,"ax",%progbits
+ 192              		.align	2
+ 193              		.thumb
+ 194              		.thumb_func
+ 195              		.type	rcvr_datablock, %function
+ 196              	rcvr_datablock:
+ 197              	.LFB68:
+ 209:FatFs_Library/sdcard.c **** 
+ 210:FatFs_Library/sdcard.c **** /*-----------------------------------------------------------------------*/
+ 211:FatFs_Library/sdcard.c **** /* Deselect the card and release SPI bus                                 */
+ 212:FatFs_Library/sdcard.c **** /*-----------------------------------------------------------------------*/
+ 213:FatFs_Library/sdcard.c **** 
+ 214:FatFs_Library/sdcard.c **** static void deselect(void)
+ 215:FatFs_Library/sdcard.c **** {
+ 216:FatFs_Library/sdcard.c **** 	BYTE d;
+ 217:FatFs_Library/sdcard.c **** 
+ 218:FatFs_Library/sdcard.c ****     mmSPI_SS_Write(1);
+ 219:FatFs_Library/sdcard.c ****     CyDelayUs(CS_DELAY_US); // <*> adjust
+ 220:FatFs_Library/sdcard.c **** 	rcvr_mmc(&d, 1);	/* Dummy clock (force DO hi-z for multiple slave SPI) */
+ 221:FatFs_Library/sdcard.c **** }
+ 222:FatFs_Library/sdcard.c **** 
+ 223:FatFs_Library/sdcard.c **** /*-----------------------------------------------------------------------*/
+ 224:FatFs_Library/sdcard.c **** /* Select the card and wait for ready                                    */
+ 225:FatFs_Library/sdcard.c **** /*-----------------------------------------------------------------------*/
+ 226:FatFs_Library/sdcard.c **** 
+ 227:FatFs_Library/sdcard.c **** static int select(void)	/* 1:OK, 0:Timeout */
+ 228:FatFs_Library/sdcard.c **** {
+ 229:FatFs_Library/sdcard.c **** 	BYTE d;
+ 230:FatFs_Library/sdcard.c **** 
+ 231:FatFs_Library/sdcard.c ****     mmSPI_SS_Write(0);
+ 232:FatFs_Library/sdcard.c ****     CyDelayUs(CS_DELAY_US); // <*> adjust
+ 233:FatFs_Library/sdcard.c **** 	rcvr_mmc(&d, 1);	/* Dummy clock (force DO enabled) */
+ 234:FatFs_Library/sdcard.c **** 	if (wait_ready()) return 1;	/* Wait for card ready */
+ 235:FatFs_Library/sdcard.c **** 
+ 236:FatFs_Library/sdcard.c **** 	deselect();
+ 237:FatFs_Library/sdcard.c **** 	return 0;			/* Failed */
+ 238:FatFs_Library/sdcard.c **** }
+ 239:FatFs_Library/sdcard.c **** 
+ 240:FatFs_Library/sdcard.c **** /*-----------------------------------------------------------------------*/
+ 241:FatFs_Library/sdcard.c **** /* Receive a data packet from the card                                   */
+ 242:FatFs_Library/sdcard.c **** /*-----------------------------------------------------------------------*/
+ 243:FatFs_Library/sdcard.c **** 
+ 244:FatFs_Library/sdcard.c **** static int rcvr_datablock(BYTE *buff, UINT btr) 	/* 1:OK, 0:Failed */
+ 245:FatFs_Library/sdcard.c **** {
+ 198              		.loc 1 245 0
+ 199              		.cfi_startproc
+ 200              		@ args = 0, pretend = 0, frame = 8
+ 201              		@ frame_needed = 0, uses_anonymous_args = 0
+ 202              	.LVL24:
+ 203 0000 70B5     		push	{r4, r5, r6, lr}
+ 204              		.cfi_def_cfa_offset 16
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqwyLbK.s 			page 9
+
+
+ 205              		.cfi_offset 4, -16
+ 206              		.cfi_offset 5, -12
+ 207              		.cfi_offset 6, -8
+ 208              		.cfi_offset 14, -4
+ 209 0002 82B0     		sub	sp, sp, #8
+ 210              		.cfi_def_cfa_offset 24
+ 211 0004 0546     		mov	r5, r0
+ 212 0006 0E46     		mov	r6, r1
+ 213              	.LVL25:
+ 246:FatFs_Library/sdcard.c **** 	BYTE d[2];
+ 247:FatFs_Library/sdcard.c **** 	UINT tmr;
+ 248:FatFs_Library/sdcard.c **** 
+ 249:FatFs_Library/sdcard.c **** 	for (tmr = 1000; tmr; tmr--) {	/* Wait for data packet in timeout of 100ms */
+ 214              		.loc 1 249 0
+ 215 0008 4FF47A74 		mov	r4, #1000
+ 216 000c 0BE0     		b	.L17
+ 217              	.LVL26:
+ 218              	.L19:
+ 250:FatFs_Library/sdcard.c **** 		rcvr_mmc(d, 1);
+ 219              		.loc 1 250 0
+ 220 000e 0121     		movs	r1, #1
+ 221 0010 01A8     		add	r0, sp, #4
+ 222 0012 FFF7FEFF 		bl	rcvr_mmc
+ 223              	.LVL27:
+ 251:FatFs_Library/sdcard.c **** 		if (d[0] != 0xFF) break;
+ 224              		.loc 1 251 0
+ 225 0016 9DF80430 		ldrb	r3, [sp, #4]	@ zero_extendqisi2
+ 226 001a FF2B     		cmp	r3, #255
+ 227 001c 05D1     		bne	.L18
+ 252:FatFs_Library/sdcard.c **** 		dly_us(100);
+ 228              		.loc 1 252 0 discriminator 2
+ 229 001e 6420     		movs	r0, #100
+ 230 0020 FFF7FEFF 		bl	CyDelayUs
+ 231              	.LVL28:
+ 249:FatFs_Library/sdcard.c **** 		rcvr_mmc(d, 1);
+ 232              		.loc 1 249 0 discriminator 2
+ 233 0024 013C     		subs	r4, r4, #1
+ 234              	.LVL29:
+ 235              	.L17:
+ 249:FatFs_Library/sdcard.c **** 		rcvr_mmc(d, 1);
+ 236              		.loc 1 249 0 is_stmt 0 discriminator 1
+ 237 0026 002C     		cmp	r4, #0
+ 238 0028 F1D1     		bne	.L19
+ 239              	.L18:
+ 253:FatFs_Library/sdcard.c **** 	}
+ 254:FatFs_Library/sdcard.c **** 	if (d[0] != 0xFE) return 0;		/* If not valid data token, return with error */
+ 240              		.loc 1 254 0 is_stmt 1
+ 241 002a 9DF80430 		ldrb	r3, [sp, #4]	@ zero_extendqisi2
+ 242 002e FE2B     		cmp	r3, #254
+ 243 0030 09D1     		bne	.L21
+ 255:FatFs_Library/sdcard.c **** 
+ 256:FatFs_Library/sdcard.c **** 	rcvr_mmc(buff, btr);			/* Receive the data block into buffer */
+ 244              		.loc 1 256 0
+ 245 0032 3146     		mov	r1, r6
+ 246 0034 2846     		mov	r0, r5
+ 247 0036 FFF7FEFF 		bl	rcvr_mmc
+ 248              	.LVL30:
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqwyLbK.s 			page 10
+
+
+ 257:FatFs_Library/sdcard.c **** 	rcvr_mmc(d, 2);					/* Discard CRC */
+ 249              		.loc 1 257 0
+ 250 003a 0221     		movs	r1, #2
+ 251 003c 01A8     		add	r0, sp, #4
+ 252 003e FFF7FEFF 		bl	rcvr_mmc
+ 253              	.LVL31:
+ 258:FatFs_Library/sdcard.c **** 
+ 259:FatFs_Library/sdcard.c **** 	return 1;						/* Return with success */
+ 254              		.loc 1 259 0
+ 255 0042 0120     		movs	r0, #1
+ 256 0044 00E0     		b	.L20
+ 257              	.L21:
+ 254:FatFs_Library/sdcard.c **** 
+ 258              		.loc 1 254 0
+ 259 0046 0020     		movs	r0, #0
+ 260              	.L20:
+ 260:FatFs_Library/sdcard.c **** }
+ 261              		.loc 1 260 0
+ 262 0048 02B0     		add	sp, sp, #8
+ 263              		.cfi_def_cfa_offset 16
+ 264              		@ sp needed
+ 265 004a 70BD     		pop	{r4, r5, r6, pc}
+ 266              		.cfi_endproc
+ 267              	.LFE68:
+ 268              		.size	rcvr_datablock, .-rcvr_datablock
+ 269              		.section	.text.xmit_datablock,"ax",%progbits
+ 270              		.align	2
+ 271              		.thumb
+ 272              		.thumb_func
+ 273              		.type	xmit_datablock, %function
+ 274              	xmit_datablock:
+ 275              	.LFB69:
+ 261:FatFs_Library/sdcard.c **** 
+ 262:FatFs_Library/sdcard.c **** /*-----------------------------------------------------------------------*/
+ 263:FatFs_Library/sdcard.c **** /* Send a data packet to the card                                        */
+ 264:FatFs_Library/sdcard.c **** /*-----------------------------------------------------------------------*/
+ 265:FatFs_Library/sdcard.c **** 
+ 266:FatFs_Library/sdcard.c **** static int xmit_datablock(const BYTE *buff, BYTE token)	/* 1:OK, 0:Failed */
+ 267:FatFs_Library/sdcard.c **** {
+ 276              		.loc 1 267 0
+ 277              		.cfi_startproc
+ 278              		@ args = 0, pretend = 0, frame = 8
+ 279              		@ frame_needed = 0, uses_anonymous_args = 0
+ 280              	.LVL32:
+ 281 0000 30B5     		push	{r4, r5, lr}
+ 282              		.cfi_def_cfa_offset 12
+ 283              		.cfi_offset 4, -12
+ 284              		.cfi_offset 5, -8
+ 285              		.cfi_offset 14, -4
+ 286 0002 83B0     		sub	sp, sp, #12
+ 287              		.cfi_def_cfa_offset 24
+ 288 0004 0546     		mov	r5, r0
+ 289 0006 0C46     		mov	r4, r1
+ 268:FatFs_Library/sdcard.c **** 	BYTE d[2];
+ 269:FatFs_Library/sdcard.c **** 
+ 270:FatFs_Library/sdcard.c **** 	if (!wait_ready()) return 0;
+ 290              		.loc 1 270 0
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqwyLbK.s 			page 11
+
+
+ 291 0008 FFF7FEFF 		bl	wait_ready
+ 292              	.LVL33:
+ 293 000c 0346     		mov	r3, r0
+ 294 000e 28B3     		cbz	r0, .L24
+ 271:FatFs_Library/sdcard.c **** 
+ 272:FatFs_Library/sdcard.c **** 	d[0] = token;
+ 295              		.loc 1 272 0
+ 296 0010 02A8     		add	r0, sp, #8
+ 297 0012 00F8044D 		strb	r4, [r0, #-4]!
+ 273:FatFs_Library/sdcard.c **** 	xmit_mmc(d, 1);				/* Xmit a token */
+ 298              		.loc 1 273 0
+ 299 0016 0121     		movs	r1, #1
+ 300 0018 FFF7FEFF 		bl	xmit_mmc
+ 301              	.LVL34:
+ 274:FatFs_Library/sdcard.c ****     CyDelayUs(M_DELAY_US); // <*> why?
+ 302              		.loc 1 274 0
+ 303 001c 0A20     		movs	r0, #10
+ 304 001e FFF7FEFF 		bl	CyDelayUs
+ 305              	.LVL35:
+ 275:FatFs_Library/sdcard.c **** 	if (token != 0xFD) {		/* Is it data token? */
+ 306              		.loc 1 275 0
+ 307 0022 FD2C     		cmp	r4, #253
+ 308 0024 17D0     		beq	.L25
+ 276:FatFs_Library/sdcard.c **** 		xmit_mmc(buff, 512);	/* Xmit the 512 byte data block to MMC */
+ 309              		.loc 1 276 0
+ 310 0026 4FF40071 		mov	r1, #512
+ 311 002a 2846     		mov	r0, r5
+ 312 002c FFF7FEFF 		bl	xmit_mmc
+ 313              	.LVL36:
+ 277:FatFs_Library/sdcard.c ****         CyDelayUs(M_DELAY_US); // <*> why?
+ 314              		.loc 1 277 0
+ 315 0030 0A20     		movs	r0, #10
+ 316 0032 FFF7FEFF 		bl	CyDelayUs
+ 317              	.LVL37:
+ 278:FatFs_Library/sdcard.c **** 		rcvr_mmc(d, 2);			/* Xmit dummy CRC (0xFF,0xFF) */
+ 318              		.loc 1 278 0
+ 319 0036 0221     		movs	r1, #2
+ 320 0038 01A8     		add	r0, sp, #4
+ 321 003a FFF7FEFF 		bl	rcvr_mmc
+ 322              	.LVL38:
+ 279:FatFs_Library/sdcard.c **** 		rcvr_mmc(d, 1);			/* Receive data response */
+ 323              		.loc 1 279 0
+ 324 003e 0121     		movs	r1, #1
+ 325 0040 01A8     		add	r0, sp, #4
+ 326 0042 FFF7FEFF 		bl	rcvr_mmc
+ 327              	.LVL39:
+ 280:FatFs_Library/sdcard.c **** 		if ((d[0] & 0x1F) != 0x05)	/* If not accepted, return with error */
+ 328              		.loc 1 280 0
+ 329 0046 9DF80430 		ldrb	r3, [sp, #4]	@ zero_extendqisi2
+ 330 004a 03F01F03 		and	r3, r3, #31
+ 331 004e 052B     		cmp	r3, #5
+ 332 0050 03D0     		beq	.L26
+ 281:FatFs_Library/sdcard.c **** 			return 0;
+ 333              		.loc 1 281 0
+ 334 0052 0023     		movs	r3, #0
+ 335 0054 02E0     		b	.L24
+ 336              	.L25:
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqwyLbK.s 			page 12
+
+
+ 282:FatFs_Library/sdcard.c **** 	}
+ 283:FatFs_Library/sdcard.c **** 
+ 284:FatFs_Library/sdcard.c **** 	return 1;
+ 337              		.loc 1 284 0
+ 338 0056 0123     		movs	r3, #1
+ 339 0058 00E0     		b	.L24
+ 340              	.L26:
+ 341 005a 0123     		movs	r3, #1
+ 342              	.L24:
+ 285:FatFs_Library/sdcard.c **** }
+ 343              		.loc 1 285 0
+ 344 005c 1846     		mov	r0, r3
+ 345 005e 03B0     		add	sp, sp, #12
+ 346              		.cfi_def_cfa_offset 12
+ 347              		@ sp needed
+ 348 0060 30BD     		pop	{r4, r5, pc}
+ 349              		.cfi_endproc
+ 350              	.LFE69:
+ 351              		.size	xmit_datablock, .-xmit_datablock
+ 352 0062 00BF     		.section	.text.deselect,"ax",%progbits
+ 353              		.align	2
+ 354              		.thumb
+ 355              		.thumb_func
+ 356              		.type	deselect, %function
+ 357              	deselect:
+ 358              	.LFB66:
+ 215:FatFs_Library/sdcard.c **** 	BYTE d;
+ 359              		.loc 1 215 0
+ 360              		.cfi_startproc
+ 361              		@ args = 0, pretend = 0, frame = 8
+ 362              		@ frame_needed = 0, uses_anonymous_args = 0
+ 363 0000 00B5     		push	{lr}
+ 364              		.cfi_def_cfa_offset 4
+ 365              		.cfi_offset 14, -4
+ 366 0002 83B0     		sub	sp, sp, #12
+ 367              		.cfi_def_cfa_offset 16
+ 218:FatFs_Library/sdcard.c ****     CyDelayUs(CS_DELAY_US); // <*> adjust
+ 368              		.loc 1 218 0
+ 369 0004 0120     		movs	r0, #1
+ 370 0006 FFF7FEFF 		bl	SPI_SS_Write
+ 371              	.LVL40:
+ 219:FatFs_Library/sdcard.c **** 	rcvr_mmc(&d, 1);	/* Dummy clock (force DO hi-z for multiple slave SPI) */
+ 372              		.loc 1 219 0
+ 373 000a 0120     		movs	r0, #1
+ 374 000c FFF7FEFF 		bl	CyDelayUs
+ 375              	.LVL41:
+ 220:FatFs_Library/sdcard.c **** }
+ 376              		.loc 1 220 0
+ 377 0010 0121     		movs	r1, #1
+ 378 0012 0DF10700 		add	r0, sp, #7
+ 379 0016 FFF7FEFF 		bl	rcvr_mmc
+ 380              	.LVL42:
+ 221:FatFs_Library/sdcard.c **** 
+ 381              		.loc 1 221 0
+ 382 001a 03B0     		add	sp, sp, #12
+ 383              		.cfi_def_cfa_offset 4
+ 384              		@ sp needed
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqwyLbK.s 			page 13
+
+
+ 385 001c 5DF804FB 		ldr	pc, [sp], #4
+ 386              		.cfi_endproc
+ 387              	.LFE66:
+ 388              		.size	deselect, .-deselect
+ 389              		.section	.text.select,"ax",%progbits
+ 390              		.align	2
+ 391              		.thumb
+ 392              		.thumb_func
+ 393              		.type	select, %function
+ 394              	select:
+ 395              	.LFB67:
+ 228:FatFs_Library/sdcard.c **** 	BYTE d;
+ 396              		.loc 1 228 0
+ 397              		.cfi_startproc
+ 398              		@ args = 0, pretend = 0, frame = 8
+ 399              		@ frame_needed = 0, uses_anonymous_args = 0
+ 400 0000 10B5     		push	{r4, lr}
+ 401              		.cfi_def_cfa_offset 8
+ 402              		.cfi_offset 4, -8
+ 403              		.cfi_offset 14, -4
+ 404 0002 82B0     		sub	sp, sp, #8
+ 405              		.cfi_def_cfa_offset 16
+ 231:FatFs_Library/sdcard.c ****     CyDelayUs(CS_DELAY_US); // <*> adjust
+ 406              		.loc 1 231 0
+ 407 0004 0020     		movs	r0, #0
+ 408 0006 FFF7FEFF 		bl	SPI_SS_Write
+ 409              	.LVL43:
+ 232:FatFs_Library/sdcard.c **** 	rcvr_mmc(&d, 1);	/* Dummy clock (force DO enabled) */
+ 410              		.loc 1 232 0
+ 411 000a 0120     		movs	r0, #1
+ 412 000c FFF7FEFF 		bl	CyDelayUs
+ 413              	.LVL44:
+ 233:FatFs_Library/sdcard.c **** 	if (wait_ready()) return 1;	/* Wait for card ready */
+ 414              		.loc 1 233 0
+ 415 0010 0121     		movs	r1, #1
+ 416 0012 0DF10700 		add	r0, sp, #7
+ 417 0016 FFF7FEFF 		bl	rcvr_mmc
+ 418              	.LVL45:
+ 234:FatFs_Library/sdcard.c **** 
+ 419              		.loc 1 234 0
+ 420 001a FFF7FEFF 		bl	wait_ready
+ 421              	.LVL46:
+ 422 001e 18B9     		cbnz	r0, .L32
+ 423 0020 0446     		mov	r4, r0
+ 236:FatFs_Library/sdcard.c **** 	return 0;			/* Failed */
+ 424              		.loc 1 236 0
+ 425 0022 FFF7FEFF 		bl	deselect
+ 426              	.LVL47:
+ 237:FatFs_Library/sdcard.c **** }
+ 427              		.loc 1 237 0
+ 428 0026 00E0     		b	.L31
+ 429              	.L32:
+ 234:FatFs_Library/sdcard.c **** 
+ 430              		.loc 1 234 0
+ 431 0028 0124     		movs	r4, #1
+ 432              	.L31:
+ 238:FatFs_Library/sdcard.c **** 
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqwyLbK.s 			page 14
+
+
+ 433              		.loc 1 238 0
+ 434 002a 2046     		mov	r0, r4
+ 435 002c 02B0     		add	sp, sp, #8
+ 436              		.cfi_def_cfa_offset 8
+ 437              		@ sp needed
+ 438 002e 10BD     		pop	{r4, pc}
+ 439              		.cfi_endproc
+ 440              	.LFE67:
+ 441              		.size	select, .-select
+ 442              		.section	.text.send_cmd,"ax",%progbits
+ 443              		.align	2
+ 444              		.thumb
+ 445              		.thumb_func
+ 446              		.type	send_cmd, %function
+ 447              	send_cmd:
+ 448              	.LFB70:
+ 286:FatFs_Library/sdcard.c **** 
+ 287:FatFs_Library/sdcard.c **** /*-----------------------------------------------------------------------*/
+ 288:FatFs_Library/sdcard.c **** /* Send a command packet to the card                                     */
+ 289:FatFs_Library/sdcard.c **** /*-----------------------------------------------------------------------*/
+ 290:FatFs_Library/sdcard.c **** 
+ 291:FatFs_Library/sdcard.c **** static BYTE send_cmd(BYTE cmd,	DWORD arg)		/* Returns command response (bit7==1:Send failed)*/
+ 292:FatFs_Library/sdcard.c **** {
+ 449              		.loc 1 292 0
+ 450              		.cfi_startproc
+ 451              		@ args = 0, pretend = 0, frame = 8
+ 452              		@ frame_needed = 0, uses_anonymous_args = 0
+ 453              	.LVL48:
+ 454 0000 30B5     		push	{r4, r5, lr}
+ 455              		.cfi_def_cfa_offset 12
+ 456              		.cfi_offset 4, -12
+ 457              		.cfi_offset 5, -8
+ 458              		.cfi_offset 14, -4
+ 459 0002 83B0     		sub	sp, sp, #12
+ 460              		.cfi_def_cfa_offset 24
+ 461 0004 0446     		mov	r4, r0
+ 462 0006 0D46     		mov	r5, r1
+ 293:FatFs_Library/sdcard.c **** 	BYTE n, d, buf[6];
+ 294:FatFs_Library/sdcard.c **** 
+ 295:FatFs_Library/sdcard.c **** 
+ 296:FatFs_Library/sdcard.c **** 	if (cmd & 0x80) {	/* ACMD<n> is the command sequense of CMD55-CMD<n> */
+ 463              		.loc 1 296 0
+ 464 0008 10F0800F 		tst	r0, #128
+ 465 000c 07D0     		beq	.L35
+ 297:FatFs_Library/sdcard.c **** 		cmd &= 0x7F;
+ 466              		.loc 1 297 0
+ 467 000e 00F07F04 		and	r4, r0, #127
+ 468              	.LVL49:
+ 298:FatFs_Library/sdcard.c **** 		n = send_cmd(CMD55, 0);
+ 469              		.loc 1 298 0
+ 470 0012 0021     		movs	r1, #0
+ 471              	.LVL50:
+ 472 0014 3720     		movs	r0, #55
+ 473 0016 FFF7F3FF 		bl	send_cmd
+ 474              	.LVL51:
+ 299:FatFs_Library/sdcard.c **** 		if (n > 1) return n;
+ 475              		.loc 1 299 0
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqwyLbK.s 			page 15
+
+
+ 476 001a 0128     		cmp	r0, #1
+ 477 001c 3FD8     		bhi	.L36
+ 478              	.LVL52:
+ 479              	.L35:
+ 300:FatFs_Library/sdcard.c **** 	}
+ 301:FatFs_Library/sdcard.c **** 
+ 302:FatFs_Library/sdcard.c **** 	/* Select the card and wait for ready except to stop multiple block read */
+ 303:FatFs_Library/sdcard.c **** 	if (cmd != CMD12) {
+ 480              		.loc 1 303 0
+ 481 001e 0C2C     		cmp	r4, #12
+ 482 0020 04D0     		beq	.L37
+ 304:FatFs_Library/sdcard.c **** 		deselect();
+ 483              		.loc 1 304 0
+ 484 0022 FFF7FEFF 		bl	deselect
+ 485              	.LVL53:
+ 305:FatFs_Library/sdcard.c **** 		if (!select()) return 0xFF;
+ 486              		.loc 1 305 0
+ 487 0026 FFF7FEFF 		bl	select
+ 488              	.LVL54:
+ 489 002a B8B3     		cbz	r0, .L43
+ 490              	.L37:
+ 306:FatFs_Library/sdcard.c **** 	}
+ 307:FatFs_Library/sdcard.c **** 
+ 308:FatFs_Library/sdcard.c **** 	/* Send a command packet */
+ 309:FatFs_Library/sdcard.c **** 	buf[0] = 0x40 | cmd;			/* Start + Command index */
+ 491              		.loc 1 309 0
+ 492 002c 44F04003 		orr	r3, r4, #64
+ 493 0030 8DF80030 		strb	r3, [sp]
+ 310:FatFs_Library/sdcard.c **** 	buf[1] = (BYTE)(arg >> 24);		/* Argument[31..24] */
+ 494              		.loc 1 310 0
+ 495 0034 2B0E     		lsrs	r3, r5, #24
+ 496 0036 8DF80130 		strb	r3, [sp, #1]
+ 311:FatFs_Library/sdcard.c **** 	buf[2] = (BYTE)(arg >> 16);		/* Argument[23..16] */
+ 497              		.loc 1 311 0
+ 498 003a C5F30743 		ubfx	r3, r5, #16, #8
+ 499 003e 8DF80230 		strb	r3, [sp, #2]
+ 312:FatFs_Library/sdcard.c **** 	buf[3] = (BYTE)(arg >> 8);		/* Argument[15..8] */
+ 500              		.loc 1 312 0
+ 501 0042 C5F30723 		ubfx	r3, r5, #8, #8
+ 502 0046 8DF80330 		strb	r3, [sp, #3]
+ 313:FatFs_Library/sdcard.c **** 	buf[4] = (BYTE)arg;				/* Argument[7..0] */
+ 503              		.loc 1 313 0
+ 504 004a 8DF80450 		strb	r5, [sp, #4]
+ 505              	.LVL55:
+ 314:FatFs_Library/sdcard.c **** 	n = 0x01;						/* Dummy CRC + Stop */
+ 315:FatFs_Library/sdcard.c **** 	if (cmd == CMD0) n = 0x95;		/* (valid CRC for CMD0(0)) */
+ 506              		.loc 1 315 0
+ 507 004e 0CB1     		cbz	r4, .L44
+ 314:FatFs_Library/sdcard.c **** 	n = 0x01;						/* Dummy CRC + Stop */
+ 508              		.loc 1 314 0
+ 509 0050 0123     		movs	r3, #1
+ 510 0052 00E0     		b	.L38
+ 511              	.L44:
+ 512              		.loc 1 315 0
+ 513 0054 9523     		movs	r3, #149
+ 514              	.L38:
+ 515              	.LVL56:
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqwyLbK.s 			page 16
+
+
+ 316:FatFs_Library/sdcard.c **** 	if (cmd == CMD8) n = 0x87;		/* (valid CRC for CMD8(0x1AA)) */
+ 516              		.loc 1 316 0
+ 517 0056 082C     		cmp	r4, #8
+ 518 0058 00D1     		bne	.L39
+ 519 005a 8723     		movs	r3, #135
+ 520              	.LVL57:
+ 521              	.L39:
+ 317:FatFs_Library/sdcard.c **** 	buf[5] = n;
+ 522              		.loc 1 317 0
+ 523 005c 8DF80530 		strb	r3, [sp, #5]
+ 318:FatFs_Library/sdcard.c **** 	xmit_mmc(buf, 6);
+ 524              		.loc 1 318 0
+ 525 0060 0621     		movs	r1, #6
+ 526 0062 6846     		mov	r0, sp
+ 527 0064 FFF7FEFF 		bl	xmit_mmc
+ 528              	.LVL58:
+ 319:FatFs_Library/sdcard.c ****     CyDelayUs(M_DELAY_US); // <*> why?
+ 529              		.loc 1 319 0
+ 530 0068 0A20     		movs	r0, #10
+ 531 006a FFF7FEFF 		bl	CyDelayUs
+ 532              	.LVL59:
+ 320:FatFs_Library/sdcard.c **** 
+ 321:FatFs_Library/sdcard.c **** 	/* Receive command response */
+ 322:FatFs_Library/sdcard.c **** 	if (cmd == CMD12) rcvr_mmc(&d, 1);	/* Skip a stuff byte when stop reading */
+ 533              		.loc 1 322 0
+ 534 006e 0C2C     		cmp	r4, #12
+ 535 0070 04D1     		bne	.L40
+ 536              		.loc 1 322 0 is_stmt 0 discriminator 1
+ 537 0072 0121     		movs	r1, #1
+ 538 0074 0DF10700 		add	r0, sp, #7
+ 539 0078 FFF7FEFF 		bl	rcvr_mmc
+ 540              	.LVL60:
+ 541              	.L40:
+ 316:FatFs_Library/sdcard.c **** 	buf[5] = n;
+ 542              		.loc 1 316 0 is_stmt 1 discriminator 2
+ 543 007c 1424     		movs	r4, #20
+ 544              	.LVL61:
+ 545              	.L41:
+ 323:FatFs_Library/sdcard.c **** 	n = 20;								/* Wait for a valid response in timeout of 10 attempts */
+ 324:FatFs_Library/sdcard.c **** 	do
+ 325:FatFs_Library/sdcard.c ****     {
+ 326:FatFs_Library/sdcard.c **** 		rcvr_mmc(&d, 1);
+ 546              		.loc 1 326 0 discriminator 2
+ 547 007e 0121     		movs	r1, #1
+ 548 0080 0DF10700 		add	r0, sp, #7
+ 549 0084 FFF7FEFF 		bl	rcvr_mmc
+ 550              	.LVL62:
+ 327:FatFs_Library/sdcard.c ****     }
+ 328:FatFs_Library/sdcard.c **** 	while ((d & 0x80) && --n);
+ 551              		.loc 1 328 0 discriminator 2
+ 552 0088 9DF80700 		ldrb	r0, [sp, #7]	@ zero_extendqisi2
+ 553 008c 10F0800F 		tst	r0, #128
+ 554 0090 05D0     		beq	.L36
+ 555              		.loc 1 328 0 is_stmt 0 discriminator 1
+ 556 0092 631E     		subs	r3, r4, #1
+ 557              	.LVL63:
+ 558 0094 13F0FF04 		ands	r4, r3, #255
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqwyLbK.s 			page 17
+
+
+ 559 0098 F1D1     		bne	.L41
+ 560 009a 00E0     		b	.L36
+ 561              	.LVL64:
+ 562              	.L43:
+ 305:FatFs_Library/sdcard.c **** 	}
+ 563              		.loc 1 305 0 is_stmt 1
+ 564 009c FF20     		movs	r0, #255
+ 565              	.LVL65:
+ 566              	.L36:
+ 329:FatFs_Library/sdcard.c **** 
+ 330:FatFs_Library/sdcard.c **** 	return d;			/* Return with the response value */
+ 331:FatFs_Library/sdcard.c **** }
+ 567              		.loc 1 331 0
+ 568 009e 03B0     		add	sp, sp, #12
+ 569              		.cfi_def_cfa_offset 12
+ 570              		@ sp needed
+ 571 00a0 30BD     		pop	{r4, r5, pc}
+ 572              		.cfi_endproc
+ 573              	.LFE70:
+ 574              		.size	send_cmd, .-send_cmd
+ 575 00a2 00BF     		.section	.text.disk_status,"ax",%progbits
+ 576              		.align	2
+ 577              		.global	disk_status
+ 578              		.thumb
+ 579              		.thumb_func
+ 580              		.type	disk_status, %function
+ 581              	disk_status:
+ 582              	.LFB71:
+ 332:FatFs_Library/sdcard.c **** 
+ 333:FatFs_Library/sdcard.c **** /*--------------------------------------------------------------------------
+ 334:FatFs_Library/sdcard.c **** 
+ 335:FatFs_Library/sdcard.c ****    Public Functions
+ 336:FatFs_Library/sdcard.c **** 
+ 337:FatFs_Library/sdcard.c **** ---------------------------------------------------------------------------*/
+ 338:FatFs_Library/sdcard.c **** 
+ 339:FatFs_Library/sdcard.c **** /*-----------------------------------------------------------------------*/
+ 340:FatFs_Library/sdcard.c **** /* Get Disk Status                                                       */
+ 341:FatFs_Library/sdcard.c **** /*-----------------------------------------------------------------------*/
+ 342:FatFs_Library/sdcard.c **** 
+ 343:FatFs_Library/sdcard.c **** DSTATUS disk_status(BYTE drv) /* Drive number (always 0) */
+ 344:FatFs_Library/sdcard.c **** {
+ 583              		.loc 1 344 0
+ 584              		.cfi_startproc
+ 585              		@ args = 0, pretend = 0, frame = 0
+ 586              		@ frame_needed = 0, uses_anonymous_args = 0
+ 587              		@ link register save eliminated.
+ 588              	.LVL66:
+ 345:FatFs_Library/sdcard.c **** 	if (drv) return STA_NOINIT;
+ 589              		.loc 1 345 0
+ 590 0000 10B9     		cbnz	r0, .L49
+ 346:FatFs_Library/sdcard.c **** 
+ 347:FatFs_Library/sdcard.c **** 	return Stat;
+ 591              		.loc 1 347 0
+ 592 0002 024B     		ldr	r3, .L50
+ 593 0004 1878     		ldrb	r0, [r3]	@ zero_extendqisi2
+ 594              	.LVL67:
+ 595 0006 7047     		bx	lr
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqwyLbK.s 			page 18
+
+
+ 596              	.LVL68:
+ 597              	.L49:
+ 345:FatFs_Library/sdcard.c **** 	if (drv) return STA_NOINIT;
+ 598              		.loc 1 345 0
+ 599 0008 0120     		movs	r0, #1
+ 600              	.LVL69:
+ 348:FatFs_Library/sdcard.c **** }
+ 601              		.loc 1 348 0
+ 602 000a 7047     		bx	lr
+ 603              	.L51:
+ 604              		.align	2
+ 605              	.L50:
+ 606 000c 00000000 		.word	.LANCHOR0
+ 607              		.cfi_endproc
+ 608              	.LFE71:
+ 609              		.size	disk_status, .-disk_status
+ 610              		.section	.text.disk_initialize,"ax",%progbits
+ 611              		.align	2
+ 612              		.global	disk_initialize
+ 613              		.thumb
+ 614              		.thumb_func
+ 615              		.type	disk_initialize, %function
+ 616              	disk_initialize:
+ 617              	.LFB72:
+ 349:FatFs_Library/sdcard.c **** 
+ 350:FatFs_Library/sdcard.c **** /*-----------------------------------------------------------------------*/
+ 351:FatFs_Library/sdcard.c **** /* Initialize Disk Drive                                                 */
+ 352:FatFs_Library/sdcard.c **** /*-----------------------------------------------------------------------*/
+ 353:FatFs_Library/sdcard.c **** 
+ 354:FatFs_Library/sdcard.c **** DSTATUS disk_initialize(BYTE drv) /* Physical drive nmuber (0) */
+ 355:FatFs_Library/sdcard.c **** {
+ 618              		.loc 1 355 0
+ 619              		.cfi_startproc
+ 620              		@ args = 0, pretend = 0, frame = 8
+ 621              		@ frame_needed = 0, uses_anonymous_args = 0
+ 622              	.LVL70:
+ 356:FatFs_Library/sdcard.c **** 	BYTE n, ty, cmd, buf[4];
+ 357:FatFs_Library/sdcard.c **** 	UINT tmr;
+ 358:FatFs_Library/sdcard.c **** 	DSTATUS s;
+ 359:FatFs_Library/sdcard.c **** 
+ 360:FatFs_Library/sdcard.c **** 	if (drv) return RES_NOTRDY;
+ 623              		.loc 1 360 0
+ 624 0000 0028     		cmp	r0, #0
+ 625 0002 40F08780 		bne	.L65
+ 355:FatFs_Library/sdcard.c **** 	BYTE n, ty, cmd, buf[4];
+ 626              		.loc 1 355 0
+ 627 0006 70B5     		push	{r4, r5, r6, lr}
+ 628              		.cfi_def_cfa_offset 16
+ 629              		.cfi_offset 4, -16
+ 630              		.cfi_offset 5, -12
+ 631              		.cfi_offset 6, -8
+ 632              		.cfi_offset 14, -4
+ 633 0008 82B0     		sub	sp, sp, #8
+ 634              		.cfi_def_cfa_offset 24
+ 361:FatFs_Library/sdcard.c **** 
+ 362:FatFs_Library/sdcard.c **** 	dly_us(10000);			/* 10ms */
+ 635              		.loc 1 362 0
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqwyLbK.s 			page 19
+
+
+ 636 000a 42F21070 		movw	r0, #10000
+ 637              	.LVL71:
+ 638 000e FFF7FEFF 		bl	CyDelayUs
+ 639              	.LVL72:
+ 363:FatFs_Library/sdcard.c **** 
+ 364:FatFs_Library/sdcard.c **** 	for (n = 10; n; n--) rcvr_mmc(buf, 1);	/* Apply 80 dummy clocks and the card gets ready to receive
+ 640              		.loc 1 364 0
+ 641 0012 0A24     		movs	r4, #10
+ 642 0014 05E0     		b	.L54
+ 643              	.LVL73:
+ 644              	.L55:
+ 645              		.loc 1 364 0 is_stmt 0 discriminator 3
+ 646 0016 0121     		movs	r1, #1
+ 647 0018 01A8     		add	r0, sp, #4
+ 648 001a FFF7FEFF 		bl	rcvr_mmc
+ 649              	.LVL74:
+ 650 001e 013C     		subs	r4, r4, #1
+ 651              	.LVL75:
+ 652 0020 E4B2     		uxtb	r4, r4
+ 653              	.LVL76:
+ 654              	.L54:
+ 655              		.loc 1 364 0 discriminator 1
+ 656 0022 002C     		cmp	r4, #0
+ 657 0024 F7D1     		bne	.L55
+ 658              	.LVL77:
+ 365:FatFs_Library/sdcard.c **** 
+ 366:FatFs_Library/sdcard.c **** 	ty = 0;
+ 367:FatFs_Library/sdcard.c **** 	if (send_cmd(CMD0, 0) == 1) {			/* Enter Idle state */
+ 659              		.loc 1 367 0 is_stmt 1
+ 660 0026 0021     		movs	r1, #0
+ 661 0028 0846     		mov	r0, r1
+ 662 002a FFF7FEFF 		bl	send_cmd
+ 663              	.LVL78:
+ 664 002e 0128     		cmp	r0, #1
+ 665 0030 58D1     		bne	.L66
+ 368:FatFs_Library/sdcard.c **** 		if (send_cmd(CMD8, 0x1AA) == 1) {	/* SDv2? */
+ 666              		.loc 1 368 0
+ 667 0032 4FF4D571 		mov	r1, #426
+ 668 0036 0820     		movs	r0, #8
+ 669 0038 FFF7FEFF 		bl	send_cmd
+ 670              	.LVL79:
+ 671 003c 0128     		cmp	r0, #1
+ 672 003e 2FD1     		bne	.L57
+ 369:FatFs_Library/sdcard.c **** 			rcvr_mmc(buf, 4);							/* Get trailing return value of R7 resp */
+ 673              		.loc 1 369 0
+ 674 0040 0421     		movs	r1, #4
+ 675 0042 0DEB0100 		add	r0, sp, r1
+ 676 0046 FFF7FEFF 		bl	rcvr_mmc
+ 677              	.LVL80:
+ 370:FatFs_Library/sdcard.c **** 			if (buf[2] == 0x01 && buf[3] == 0xAA) {		/* The card can work at vdd range of 2.7-3.6V */
+ 678              		.loc 1 370 0
+ 679 004a 9DF80630 		ldrb	r3, [sp, #6]	@ zero_extendqisi2
+ 680 004e 012B     		cmp	r3, #1
+ 681 0050 4AD1     		bne	.L67
+ 682              		.loc 1 370 0 is_stmt 0 discriminator 1
+ 683 0052 9DF80730 		ldrb	r3, [sp, #7]	@ zero_extendqisi2
+ 684 0056 AA2B     		cmp	r3, #170
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqwyLbK.s 			page 20
+
+
+ 685 0058 0CD0     		beq	.L68
+ 686 005a 50E0     		b	.L56
+ 687              	.LVL81:
+ 688              	.L60:
+ 371:FatFs_Library/sdcard.c **** 				for (tmr = 1000; tmr; tmr--) {			/* Wait for leaving idle state (ACMD41 with HCS bit) */
+ 372:FatFs_Library/sdcard.c **** 					if (send_cmd(ACMD41, 1UL << 30) == 0) break;
+ 689              		.loc 1 372 0 is_stmt 1
+ 690 005c 4FF08041 		mov	r1, #1073741824
+ 691 0060 A920     		movs	r0, #169
+ 692 0062 FFF7FEFF 		bl	send_cmd
+ 693              	.LVL82:
+ 694 0066 48B1     		cbz	r0, .L59
+ 373:FatFs_Library/sdcard.c **** 					dly_us(1000);
+ 695              		.loc 1 373 0 discriminator 2
+ 696 0068 4FF47A70 		mov	r0, #1000
+ 697 006c FFF7FEFF 		bl	CyDelayUs
+ 698              	.LVL83:
+ 371:FatFs_Library/sdcard.c **** 				for (tmr = 1000; tmr; tmr--) {			/* Wait for leaving idle state (ACMD41 with HCS bit) */
+ 699              		.loc 1 371 0 discriminator 2
+ 700 0070 013C     		subs	r4, r4, #1
+ 701              	.LVL84:
+ 702 0072 01E0     		b	.L58
+ 703              	.LVL85:
+ 704              	.L68:
+ 705 0074 4FF47A74 		mov	r4, #1000
+ 706              	.LVL86:
+ 707              	.L58:
+ 371:FatFs_Library/sdcard.c **** 				for (tmr = 1000; tmr; tmr--) {			/* Wait for leaving idle state (ACMD41 with HCS bit) */
+ 708              		.loc 1 371 0 is_stmt 0 discriminator 1
+ 709 0078 002C     		cmp	r4, #0
+ 710 007a EFD1     		bne	.L60
+ 711              	.L59:
+ 374:FatFs_Library/sdcard.c **** 				}
+ 375:FatFs_Library/sdcard.c **** 				if (tmr && send_cmd(CMD58, 0) == 0) {	/* Check CCS bit in the OCR */
+ 712              		.loc 1 375 0 is_stmt 1
+ 713 007c B4B3     		cbz	r4, .L69
+ 714              		.loc 1 375 0 is_stmt 0 discriminator 1
+ 715 007e 0021     		movs	r1, #0
+ 716 0080 3A20     		movs	r0, #58
+ 717 0082 FFF7FEFF 		bl	send_cmd
+ 718              	.LVL87:
+ 719 0086 98BB     		cbnz	r0, .L70
+ 376:FatFs_Library/sdcard.c **** 					rcvr_mmc(buf, 4);
+ 720              		.loc 1 376 0 is_stmt 1
+ 721 0088 0421     		movs	r1, #4
+ 722 008a 0DEB0100 		add	r0, sp, r1
+ 723 008e FFF7FEFF 		bl	rcvr_mmc
+ 724              	.LVL88:
+ 377:FatFs_Library/sdcard.c **** 					ty = (buf[0] & 0x40) ? CT_SD2 | CT_BLOCK : CT_SD2;	/* SDv2 */
+ 725              		.loc 1 377 0
+ 726 0092 9DF80430 		ldrb	r3, [sp, #4]	@ zero_extendqisi2
+ 727 0096 13F0400F 		tst	r3, #64
+ 728 009a 2BD0     		beq	.L71
+ 729 009c 0C24     		movs	r4, #12
+ 730              	.LVL89:
+ 731 009e 2EE0     		b	.L56
+ 732              	.LVL90:
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqwyLbK.s 			page 21
+
+
+ 733              	.L57:
+ 378:FatFs_Library/sdcard.c **** 				}
+ 379:FatFs_Library/sdcard.c **** 			}
+ 380:FatFs_Library/sdcard.c **** 		} else {							/* SDv1 or MMCv3 */
+ 381:FatFs_Library/sdcard.c **** 			if (send_cmd(ACMD41, 0) <= 1) 	{
+ 734              		.loc 1 381 0
+ 735 00a0 0021     		movs	r1, #0
+ 736 00a2 A920     		movs	r0, #169
+ 737 00a4 FFF7FEFF 		bl	send_cmd
+ 738              	.LVL91:
+ 739 00a8 0128     		cmp	r0, #1
+ 740 00aa 02D8     		bhi	.L72
+ 382:FatFs_Library/sdcard.c **** 				ty = CT_SD1; cmd = ACMD41;	/* SDv1 */
+ 741              		.loc 1 382 0
+ 742 00ac A926     		movs	r6, #169
+ 743 00ae 0224     		movs	r4, #2
+ 744              	.LVL92:
+ 745 00b0 01E0     		b	.L61
+ 746              	.LVL93:
+ 747              	.L72:
+ 383:FatFs_Library/sdcard.c **** 			} else {
+ 384:FatFs_Library/sdcard.c **** 				ty = CT_MMC; cmd = CMD1;	/* MMCv3 */
+ 748              		.loc 1 384 0
+ 749 00b2 0126     		movs	r6, #1
+ 750 00b4 3446     		mov	r4, r6
+ 751              	.LVL94:
+ 752              	.L61:
+ 385:FatFs_Library/sdcard.c **** 			}
+ 386:FatFs_Library/sdcard.c **** 			for (tmr = 1000; tmr; tmr--) {			/* Wait for leaving idle state */
+ 753              		.loc 1 386 0
+ 754 00b6 4FF47A75 		mov	r5, #1000
+ 755 00ba 09E0     		b	.L62
+ 756              	.LVL95:
+ 757              	.L64:
+ 387:FatFs_Library/sdcard.c **** 				if (send_cmd(cmd, 0) == 0) break;
+ 758              		.loc 1 387 0
+ 759 00bc 0021     		movs	r1, #0
+ 760 00be 3046     		mov	r0, r6
+ 761 00c0 FFF7FEFF 		bl	send_cmd
+ 762              	.LVL96:
+ 763 00c4 30B1     		cbz	r0, .L63
+ 388:FatFs_Library/sdcard.c **** 				dly_us(1000);
+ 764              		.loc 1 388 0 discriminator 2
+ 765 00c6 4FF47A70 		mov	r0, #1000
+ 766 00ca FFF7FEFF 		bl	CyDelayUs
+ 767              	.LVL97:
+ 386:FatFs_Library/sdcard.c **** 				if (send_cmd(cmd, 0) == 0) break;
+ 768              		.loc 1 386 0 discriminator 2
+ 769 00ce 013D     		subs	r5, r5, #1
+ 770              	.LVL98:
+ 771              	.L62:
+ 386:FatFs_Library/sdcard.c **** 				if (send_cmd(cmd, 0) == 0) break;
+ 772              		.loc 1 386 0 is_stmt 0 discriminator 1
+ 773 00d0 002D     		cmp	r5, #0
+ 774 00d2 F3D1     		bne	.L64
+ 775              	.L63:
+ 389:FatFs_Library/sdcard.c **** 			}
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqwyLbK.s 			page 22
+
+
+ 390:FatFs_Library/sdcard.c **** 			if (!tmr || send_cmd(CMD16, 512) != 0)	/* Set R/W block length to 512 */
+ 776              		.loc 1 390 0 is_stmt 1
+ 777 00d4 85B1     		cbz	r5, .L73
+ 778              		.loc 1 390 0 is_stmt 0 discriminator 1
+ 779 00d6 4FF40071 		mov	r1, #512
+ 780 00da 1020     		movs	r0, #16
+ 781 00dc FFF7FEFF 		bl	send_cmd
+ 782              	.LVL99:
+ 783 00e0 60B9     		cbnz	r0, .L74
+ 784 00e2 0CE0     		b	.L56
+ 785              	.LVL100:
+ 786              	.L66:
+ 366:FatFs_Library/sdcard.c **** 	if (send_cmd(CMD0, 0) == 1) {			/* Enter Idle state */
+ 787              		.loc 1 366 0 is_stmt 1
+ 788 00e4 0024     		movs	r4, #0
+ 789              	.LVL101:
+ 790 00e6 0AE0     		b	.L56
+ 791              	.LVL102:
+ 792              	.L67:
+ 793 00e8 0024     		movs	r4, #0
+ 794              	.LVL103:
+ 795 00ea 08E0     		b	.L56
+ 796              	.LVL104:
+ 797              	.L69:
+ 798 00ec 0024     		movs	r4, #0
+ 799              	.LVL105:
+ 800 00ee 06E0     		b	.L56
+ 801              	.LVL106:
+ 802              	.L70:
+ 803 00f0 0024     		movs	r4, #0
+ 804              	.LVL107:
+ 805 00f2 04E0     		b	.L56
+ 806              	.LVL108:
+ 807              	.L71:
+ 377:FatFs_Library/sdcard.c **** 				}
+ 808              		.loc 1 377 0
+ 809 00f4 0424     		movs	r4, #4
+ 810              	.LVL109:
+ 811 00f6 02E0     		b	.L56
+ 812              	.LVL110:
+ 813              	.L73:
+ 391:FatFs_Library/sdcard.c **** 				ty = 0;
+ 814              		.loc 1 391 0
+ 815 00f8 0024     		movs	r4, #0
+ 816              	.LVL111:
+ 817 00fa 00E0     		b	.L56
+ 818              	.LVL112:
+ 819              	.L74:
+ 820 00fc 0024     		movs	r4, #0
+ 821              	.LVL113:
+ 822              	.L56:
+ 392:FatFs_Library/sdcard.c **** 		}
+ 393:FatFs_Library/sdcard.c **** 	}
+ 394:FatFs_Library/sdcard.c **** 	CardType = ty;
+ 823              		.loc 1 394 0
+ 824 00fe 074B     		ldr	r3, .L77
+ 825 0100 1C70     		strb	r4, [r3]
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqwyLbK.s 			page 23
+
+
+ 395:FatFs_Library/sdcard.c **** 	s = ty ? 0 : STA_NOINIT;
+ 826              		.loc 1 395 0
+ 827 0102 B4FA84F4 		clz	r4, r4
+ 828              	.LVL114:
+ 829 0106 6409     		lsrs	r4, r4, #5
+ 830              	.LVL115:
+ 396:FatFs_Library/sdcard.c **** 	Stat = s;
+ 831              		.loc 1 396 0
+ 832 0108 054B     		ldr	r3, .L77+4
+ 833 010a 1C70     		strb	r4, [r3]
+ 397:FatFs_Library/sdcard.c **** 
+ 398:FatFs_Library/sdcard.c **** 	deselect();
+ 834              		.loc 1 398 0
+ 835 010c FFF7FEFF 		bl	deselect
+ 836              	.LVL116:
+ 399:FatFs_Library/sdcard.c **** 
+ 400:FatFs_Library/sdcard.c **** 	return s;
+ 837              		.loc 1 400 0
+ 838 0110 2046     		mov	r0, r4
+ 839 0112 01E0     		b	.L53
+ 840              	.LVL117:
+ 841              	.L65:
+ 842              		.cfi_def_cfa_offset 0
+ 843              		.cfi_restore 4
+ 844              		.cfi_restore 5
+ 845              		.cfi_restore 6
+ 846              		.cfi_restore 14
+ 360:FatFs_Library/sdcard.c **** 
+ 847              		.loc 1 360 0
+ 848 0114 0320     		movs	r0, #3
+ 849              	.LVL118:
+ 850 0116 7047     		bx	lr
+ 851              	.LVL119:
+ 852              	.L53:
+ 853              		.cfi_def_cfa_offset 24
+ 854              		.cfi_offset 4, -16
+ 855              		.cfi_offset 5, -12
+ 856              		.cfi_offset 6, -8
+ 857              		.cfi_offset 14, -4
+ 401:FatFs_Library/sdcard.c **** }
+ 858              		.loc 1 401 0
+ 859 0118 02B0     		add	sp, sp, #8
+ 860              		.cfi_def_cfa_offset 16
+ 861              		@ sp needed
+ 862 011a 70BD     		pop	{r4, r5, r6, pc}
+ 863              	.LVL120:
+ 864              	.L78:
+ 865              		.align	2
+ 866              	.L77:
+ 867 011c 00000000 		.word	.LANCHOR1
+ 868 0120 00000000 		.word	.LANCHOR0
+ 869              		.cfi_endproc
+ 870              	.LFE72:
+ 871              		.size	disk_initialize, .-disk_initialize
+ 872              		.section	.text.disk_read,"ax",%progbits
+ 873              		.align	2
+ 874              		.global	disk_read
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqwyLbK.s 			page 24
+
+
+ 875              		.thumb
+ 876              		.thumb_func
+ 877              		.type	disk_read, %function
+ 878              	disk_read:
+ 879              	.LFB73:
+ 402:FatFs_Library/sdcard.c **** 
+ 403:FatFs_Library/sdcard.c **** /*-----------------------------------------------------------------------*/
+ 404:FatFs_Library/sdcard.c **** /* Read Sector(s)                                                        */
+ 405:FatFs_Library/sdcard.c **** /*-----------------------------------------------------------------------*/
+ 406:FatFs_Library/sdcard.c **** 
+ 407:FatFs_Library/sdcard.c **** DRESULT disk_read(BYTE drv,	BYTE *buff,	DWORD sector, UINT count) /* Physical drive nmuber (0) */
+ 408:FatFs_Library/sdcard.c **** {
+ 880              		.loc 1 408 0
+ 881              		.cfi_startproc
+ 882              		@ args = 0, pretend = 0, frame = 0
+ 883              		@ frame_needed = 0, uses_anonymous_args = 0
+ 884              	.LVL121:
+ 885 0000 F8B5     		push	{r3, r4, r5, r6, r7, lr}
+ 886              		.cfi_def_cfa_offset 24
+ 887              		.cfi_offset 3, -24
+ 888              		.cfi_offset 4, -20
+ 889              		.cfi_offset 5, -16
+ 890              		.cfi_offset 6, -12
+ 891              		.cfi_offset 7, -8
+ 892              		.cfi_offset 14, -4
+ 893 0002 0D46     		mov	r5, r1
+ 894 0004 1646     		mov	r6, r2
+ 895 0006 1C46     		mov	r4, r3
+ 409:FatFs_Library/sdcard.c **** 	BYTE cmd;
+ 410:FatFs_Library/sdcard.c **** 
+ 411:FatFs_Library/sdcard.c **** 	if (disk_status(drv) & STA_NOINIT) return RES_NOTRDY;
+ 896              		.loc 1 411 0
+ 897 0008 FFF7FEFF 		bl	disk_status
+ 898              	.LVL122:
+ 899 000c 10F0010F 		tst	r0, #1
+ 900 0010 25D1     		bne	.L86
+ 412:FatFs_Library/sdcard.c **** 	if (!(CardType & CT_BLOCK)) sector *= 512;	/* Convert LBA to byte address if needed */
+ 901              		.loc 1 412 0
+ 902 0012 144B     		ldr	r3, .L89
+ 903 0014 1B78     		ldrb	r3, [r3]	@ zero_extendqisi2
+ 904 0016 13F0080F 		tst	r3, #8
+ 905 001a 00D1     		bne	.L81
+ 906              		.loc 1 412 0 is_stmt 0 discriminator 1
+ 907 001c 7602     		lsls	r6, r6, #9
+ 908              	.LVL123:
+ 909              	.L81:
+ 413:FatFs_Library/sdcard.c **** 
+ 414:FatFs_Library/sdcard.c **** 	cmd = count > 1 ? CMD18 : CMD17;			/*  READ_MULTIPLE_BLOCK : READ_SINGLE_BLOCK */
+ 910              		.loc 1 414 0 is_stmt 1
+ 911 001e 012C     		cmp	r4, #1
+ 912 0020 01D9     		bls	.L87
+ 913 0022 1227     		movs	r7, #18
+ 914 0024 00E0     		b	.L82
+ 915              	.L87:
+ 916 0026 1127     		movs	r7, #17
+ 917              	.L82:
+ 918              	.LVL124:
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqwyLbK.s 			page 25
+
+
+ 415:FatFs_Library/sdcard.c **** 	if (send_cmd(cmd, sector) == 0) {
+ 919              		.loc 1 415 0 discriminator 4
+ 920 0028 3146     		mov	r1, r6
+ 921 002a 3846     		mov	r0, r7
+ 922 002c FFF7FEFF 		bl	send_cmd
+ 923              	.LVL125:
+ 924 0030 78B9     		cbnz	r0, .L83
+ 925              	.L85:
+ 416:FatFs_Library/sdcard.c **** 		do {
+ 417:FatFs_Library/sdcard.c **** 			if (!rcvr_datablock(buff, 512)) break;
+ 926              		.loc 1 417 0
+ 927 0032 4FF40071 		mov	r1, #512
+ 928 0036 2846     		mov	r0, r5
+ 929 0038 FFF7FEFF 		bl	rcvr_datablock
+ 930              	.LVL126:
+ 931 003c 18B1     		cbz	r0, .L84
+ 418:FatFs_Library/sdcard.c **** 			buff += 512;
+ 932              		.loc 1 418 0
+ 933 003e 05F50075 		add	r5, r5, #512
+ 934              	.LVL127:
+ 419:FatFs_Library/sdcard.c **** 		} while (--count);
+ 935              		.loc 1 419 0
+ 936 0042 013C     		subs	r4, r4, #1
+ 937              	.LVL128:
+ 938 0044 F5D1     		bne	.L85
+ 939              	.L84:
+ 420:FatFs_Library/sdcard.c **** 		if (cmd == CMD18) send_cmd(CMD12, 0);	/* STOP_TRANSMISSION */
+ 940              		.loc 1 420 0
+ 941 0046 122F     		cmp	r7, #18
+ 942 0048 03D1     		bne	.L83
+ 943              		.loc 1 420 0 is_stmt 0 discriminator 1
+ 944 004a 0021     		movs	r1, #0
+ 945 004c 0C20     		movs	r0, #12
+ 946 004e FFF7FEFF 		bl	send_cmd
+ 947              	.LVL129:
+ 948              	.L83:
+ 421:FatFs_Library/sdcard.c **** 	}
+ 422:FatFs_Library/sdcard.c **** 	deselect();
+ 949              		.loc 1 422 0 is_stmt 1
+ 950 0052 FFF7FEFF 		bl	deselect
+ 951              	.LVL130:
+ 423:FatFs_Library/sdcard.c **** 
+ 424:FatFs_Library/sdcard.c **** 	return count ? RES_ERROR : RES_OK;
+ 952              		.loc 1 424 0
+ 953 0056 201C     		adds	r0, r4, #0
+ 954 0058 18BF     		it	ne
+ 955 005a 0120     		movne	r0, #1
+ 956 005c F8BD     		pop	{r3, r4, r5, r6, r7, pc}
+ 957              	.LVL131:
+ 958              	.L86:
+ 411:FatFs_Library/sdcard.c **** 	if (!(CardType & CT_BLOCK)) sector *= 512;	/* Convert LBA to byte address if needed */
+ 959              		.loc 1 411 0
+ 960 005e 0320     		movs	r0, #3
+ 425:FatFs_Library/sdcard.c **** }
+ 961              		.loc 1 425 0
+ 962 0060 F8BD     		pop	{r3, r4, r5, r6, r7, pc}
+ 963              	.LVL132:
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqwyLbK.s 			page 26
+
+
+ 964              	.L90:
+ 965 0062 00BF     		.align	2
+ 966              	.L89:
+ 967 0064 00000000 		.word	.LANCHOR1
+ 968              		.cfi_endproc
+ 969              	.LFE73:
+ 970              		.size	disk_read, .-disk_read
+ 971              		.section	.text.disk_write,"ax",%progbits
+ 972              		.align	2
+ 973              		.global	disk_write
+ 974              		.thumb
+ 975              		.thumb_func
+ 976              		.type	disk_write, %function
+ 977              	disk_write:
+ 978              	.LFB74:
+ 426:FatFs_Library/sdcard.c **** 
+ 427:FatFs_Library/sdcard.c **** /*-----------------------------------------------------------------------*/
+ 428:FatFs_Library/sdcard.c **** /* Write Sector(s)                                                       */
+ 429:FatFs_Library/sdcard.c **** /*-----------------------------------------------------------------------*/
+ 430:FatFs_Library/sdcard.c **** 
+ 431:FatFs_Library/sdcard.c **** DRESULT disk_write (
+ 432:FatFs_Library/sdcard.c **** 	BYTE drv,			/* Physical drive nmuber (0) */
+ 433:FatFs_Library/sdcard.c **** 	const BYTE *buff,	/* Pointer to the data to be written */
+ 434:FatFs_Library/sdcard.c **** 	DWORD sector,		/* Start sector number (LBA) */
+ 435:FatFs_Library/sdcard.c **** 	UINT count			/* Sector count (1..128) */
+ 436:FatFs_Library/sdcard.c **** )
+ 437:FatFs_Library/sdcard.c **** {
+ 979              		.loc 1 437 0
+ 980              		.cfi_startproc
+ 981              		@ args = 0, pretend = 0, frame = 0
+ 982              		@ frame_needed = 0, uses_anonymous_args = 0
+ 983              	.LVL133:
+ 984 0000 70B5     		push	{r4, r5, r6, lr}
+ 985              		.cfi_def_cfa_offset 16
+ 986              		.cfi_offset 4, -16
+ 987              		.cfi_offset 5, -12
+ 988              		.cfi_offset 6, -8
+ 989              		.cfi_offset 14, -4
+ 990 0002 0D46     		mov	r5, r1
+ 991 0004 1646     		mov	r6, r2
+ 992 0006 1C46     		mov	r4, r3
+ 438:FatFs_Library/sdcard.c **** 	if (disk_status(drv) & STA_NOINIT) return RES_NOTRDY;
+ 993              		.loc 1 438 0
+ 994 0008 FFF7FEFF 		bl	disk_status
+ 995              	.LVL134:
+ 996 000c 10F0010F 		tst	r0, #1
+ 997 0010 36D1     		bne	.L99
+ 439:FatFs_Library/sdcard.c **** 	if (!(CardType & CT_BLOCK)) sector *= 512;	/* Convert LBA to byte address if needed */
+ 998              		.loc 1 439 0
+ 999 0012 1C4B     		ldr	r3, .L103
+ 1000 0014 1B78     		ldrb	r3, [r3]	@ zero_extendqisi2
+ 1001 0016 13F0080F 		tst	r3, #8
+ 1002 001a 00D1     		bne	.L93
+ 1003              		.loc 1 439 0 is_stmt 0 discriminator 1
+ 1004 001c 7602     		lsls	r6, r6, #9
+ 1005              	.LVL135:
+ 1006              	.L93:
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqwyLbK.s 			page 27
+
+
+ 440:FatFs_Library/sdcard.c **** 
+ 441:FatFs_Library/sdcard.c **** 	if (count == 1) {	/* Single block write */
+ 1007              		.loc 1 441 0 is_stmt 1
+ 1008 001e 012C     		cmp	r4, #1
+ 1009 0020 0AD1     		bne	.L94
+ 442:FatFs_Library/sdcard.c **** 		if ((send_cmd(CMD24, sector) == 0)	/* WRITE_BLOCK */
+ 1010              		.loc 1 442 0
+ 1011 0022 3146     		mov	r1, r6
+ 1012 0024 1820     		movs	r0, #24
+ 1013 0026 FFF7FEFF 		bl	send_cmd
+ 1014              	.LVL136:
+ 1015 002a 18BB     		cbnz	r0, .L95
+ 443:FatFs_Library/sdcard.c **** 			&& xmit_datablock(buff, 0xFE))
+ 1016              		.loc 1 443 0
+ 1017 002c FE21     		movs	r1, #254
+ 1018 002e 2846     		mov	r0, r5
+ 1019 0030 FFF7FEFF 		bl	xmit_datablock
+ 1020              	.LVL137:
+ 1021 0034 D8B9     		cbnz	r0, .L100
+ 1022 0036 1DE0     		b	.L95
+ 1023              	.L94:
+ 444:FatFs_Library/sdcard.c **** 			count = 0;
+ 445:FatFs_Library/sdcard.c **** 	}
+ 446:FatFs_Library/sdcard.c **** 	else {				/* Multiple block write */
+ 447:FatFs_Library/sdcard.c **** 		if (CardType & CT_SDC) send_cmd(ACMD23, count);
+ 1024              		.loc 1 447 0
+ 1025 0038 13F0060F 		tst	r3, #6
+ 1026 003c 03D0     		beq	.L96
+ 1027              		.loc 1 447 0 is_stmt 0 discriminator 1
+ 1028 003e 2146     		mov	r1, r4
+ 1029 0040 9720     		movs	r0, #151
+ 1030 0042 FFF7FEFF 		bl	send_cmd
+ 1031              	.LVL138:
+ 1032              	.L96:
+ 448:FatFs_Library/sdcard.c **** 		if (send_cmd(CMD25, sector) == 0) {	/* WRITE_MULTIPLE_BLOCK */
+ 1033              		.loc 1 448 0 is_stmt 1
+ 1034 0046 3146     		mov	r1, r6
+ 1035 0048 1920     		movs	r0, #25
+ 1036 004a FFF7FEFF 		bl	send_cmd
+ 1037              	.LVL139:
+ 1038 004e 88B9     		cbnz	r0, .L95
+ 1039              	.L98:
+ 449:FatFs_Library/sdcard.c **** 			do {
+ 450:FatFs_Library/sdcard.c **** 				if (!xmit_datablock(buff, 0xFC)) break;
+ 1040              		.loc 1 450 0
+ 1041 0050 FC21     		movs	r1, #252
+ 1042 0052 2846     		mov	r0, r5
+ 1043 0054 FFF7FEFF 		bl	xmit_datablock
+ 1044              	.LVL140:
+ 1045 0058 18B1     		cbz	r0, .L97
+ 451:FatFs_Library/sdcard.c **** 				buff += 512;
+ 1046              		.loc 1 451 0
+ 1047 005a 05F50075 		add	r5, r5, #512
+ 1048              	.LVL141:
+ 452:FatFs_Library/sdcard.c **** 			} while (--count);
+ 1049              		.loc 1 452 0
+ 1050 005e 013C     		subs	r4, r4, #1
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqwyLbK.s 			page 28
+
+
+ 1051              	.LVL142:
+ 1052 0060 F6D1     		bne	.L98
+ 1053              	.L97:
+ 453:FatFs_Library/sdcard.c **** 			if (!xmit_datablock(0, 0xFD))	/* STOP_TRAN token */
+ 1054              		.loc 1 453 0
+ 1055 0062 FD21     		movs	r1, #253
+ 1056 0064 0020     		movs	r0, #0
+ 1057 0066 FFF7FEFF 		bl	xmit_datablock
+ 1058              	.LVL143:
+ 1059 006a 10B1     		cbz	r0, .L101
+ 1060 006c 02E0     		b	.L95
+ 1061              	.L100:
+ 444:FatFs_Library/sdcard.c **** 	}
+ 1062              		.loc 1 444 0
+ 1063 006e 0024     		movs	r4, #0
+ 1064              	.LVL144:
+ 1065 0070 00E0     		b	.L95
+ 1066              	.LVL145:
+ 1067              	.L101:
+ 454:FatFs_Library/sdcard.c **** 				count = 1;
+ 1068              		.loc 1 454 0
+ 1069 0072 0124     		movs	r4, #1
+ 1070              	.LVL146:
+ 1071              	.L95:
+ 455:FatFs_Library/sdcard.c **** 		}
+ 456:FatFs_Library/sdcard.c **** 	}
+ 457:FatFs_Library/sdcard.c **** 	deselect();
+ 1072              		.loc 1 457 0
+ 1073 0074 FFF7FEFF 		bl	deselect
+ 1074              	.LVL147:
+ 458:FatFs_Library/sdcard.c **** 
+ 459:FatFs_Library/sdcard.c **** 	return count ? RES_ERROR : RES_OK;
+ 1075              		.loc 1 459 0
+ 1076 0078 201C     		adds	r0, r4, #0
+ 1077 007a 18BF     		it	ne
+ 1078 007c 0120     		movne	r0, #1
+ 1079 007e 70BD     		pop	{r4, r5, r6, pc}
+ 1080              	.LVL148:
+ 1081              	.L99:
+ 438:FatFs_Library/sdcard.c **** 	if (!(CardType & CT_BLOCK)) sector *= 512;	/* Convert LBA to byte address if needed */
+ 1082              		.loc 1 438 0
+ 1083 0080 0320     		movs	r0, #3
+ 460:FatFs_Library/sdcard.c **** }
+ 1084              		.loc 1 460 0
+ 1085 0082 70BD     		pop	{r4, r5, r6, pc}
+ 1086              	.LVL149:
+ 1087              	.L104:
+ 1088              		.align	2
+ 1089              	.L103:
+ 1090 0084 00000000 		.word	.LANCHOR1
+ 1091              		.cfi_endproc
+ 1092              	.LFE74:
+ 1093              		.size	disk_write, .-disk_write
+ 1094              		.section	.text.disk_ioctl,"ax",%progbits
+ 1095              		.align	2
+ 1096              		.global	disk_ioctl
+ 1097              		.thumb
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqwyLbK.s 			page 29
+
+
+ 1098              		.thumb_func
+ 1099              		.type	disk_ioctl, %function
+ 1100              	disk_ioctl:
+ 1101              	.LFB75:
+ 461:FatFs_Library/sdcard.c **** 
+ 462:FatFs_Library/sdcard.c **** 
+ 463:FatFs_Library/sdcard.c **** /*-----------------------------------------------------------------------*/
+ 464:FatFs_Library/sdcard.c **** /* Miscellaneous Functions                                               */
+ 465:FatFs_Library/sdcard.c **** /*-----------------------------------------------------------------------*/
+ 466:FatFs_Library/sdcard.c **** 
+ 467:FatFs_Library/sdcard.c **** DRESULT disk_ioctl (
+ 468:FatFs_Library/sdcard.c **** 	BYTE drv,		/* Physical drive nmuber (0) */
+ 469:FatFs_Library/sdcard.c **** 	BYTE ctrl,		/* Control code */
+ 470:FatFs_Library/sdcard.c **** 	void *buff		/* Buffer to send/receive control data */
+ 471:FatFs_Library/sdcard.c **** )
+ 472:FatFs_Library/sdcard.c **** {
+ 1102              		.loc 1 472 0
+ 1103              		.cfi_startproc
+ 1104              		@ args = 0, pretend = 0, frame = 16
+ 1105              		@ frame_needed = 0, uses_anonymous_args = 0
+ 1106              	.LVL150:
+ 1107 0000 30B5     		push	{r4, r5, lr}
+ 1108              		.cfi_def_cfa_offset 12
+ 1109              		.cfi_offset 4, -12
+ 1110              		.cfi_offset 5, -8
+ 1111              		.cfi_offset 14, -4
+ 1112 0002 85B0     		sub	sp, sp, #20
+ 1113              		.cfi_def_cfa_offset 32
+ 1114 0004 0C46     		mov	r4, r1
+ 1115 0006 1546     		mov	r5, r2
+ 473:FatFs_Library/sdcard.c **** 	DRESULT res;
+ 474:FatFs_Library/sdcard.c **** 	BYTE n, csd[16];
+ 475:FatFs_Library/sdcard.c **** 	DWORD cs;
+ 476:FatFs_Library/sdcard.c **** 
+ 477:FatFs_Library/sdcard.c **** 
+ 478:FatFs_Library/sdcard.c **** 	if (disk_status(drv) & STA_NOINIT) return RES_NOTRDY;	/* Check if card is in the socket */
+ 1116              		.loc 1 478 0
+ 1117 0008 FFF7FEFF 		bl	disk_status
+ 1118              	.LVL151:
+ 1119 000c 10F0010F 		tst	r0, #1
+ 1120 0010 60D1     		bne	.L112
+ 1121              	.LVL152:
+ 479:FatFs_Library/sdcard.c **** 
+ 480:FatFs_Library/sdcard.c **** 	res = RES_ERROR;
+ 481:FatFs_Library/sdcard.c **** 	switch (ctrl) {
+ 1122              		.loc 1 481 0
+ 1123 0012 012C     		cmp	r4, #1
+ 1124 0014 09D0     		beq	.L108
+ 1125 0016 14B1     		cbz	r4, .L109
+ 1126 0018 032C     		cmp	r4, #3
+ 1127 001a 4CD0     		beq	.L110
+ 1128 001c 4FE0     		b	.L117
+ 1129              	.L109:
+ 482:FatFs_Library/sdcard.c **** 		case CTRL_SYNC :		/* Make sure that no pending write process */
+ 483:FatFs_Library/sdcard.c **** 			if (select()) res = RES_OK;
+ 1130              		.loc 1 483 0
+ 1131 001e FFF7FEFF 		bl	select
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqwyLbK.s 			page 30
+
+
+ 1132              	.LVL153:
+ 1133 0022 0028     		cmp	r0, #0
+ 1134 0024 4DD1     		bne	.L114
+ 480:FatFs_Library/sdcard.c **** 	switch (ctrl) {
+ 1135              		.loc 1 480 0
+ 1136 0026 0124     		movs	r4, #1
+ 1137 0028 50E0     		b	.L107
+ 1138              	.L108:
+ 484:FatFs_Library/sdcard.c **** 			break;
+ 485:FatFs_Library/sdcard.c **** 
+ 486:FatFs_Library/sdcard.c **** 		case GET_SECTOR_COUNT :	/* Get number of sectors on the disk (DWORD) */
+ 487:FatFs_Library/sdcard.c **** 			if ((send_cmd(CMD9, 0) == 0) && rcvr_datablock(csd, 16)) {
+ 1139              		.loc 1 487 0
+ 1140 002a 0021     		movs	r1, #0
+ 1141 002c 0920     		movs	r0, #9
+ 1142 002e FFF7FEFF 		bl	send_cmd
+ 1143              	.LVL154:
+ 1144 0032 0028     		cmp	r0, #0
+ 1145 0034 47D1     		bne	.L115
+ 1146              		.loc 1 487 0 is_stmt 0 discriminator 1
+ 1147 0036 1021     		movs	r1, #16
+ 1148 0038 6846     		mov	r0, sp
+ 1149 003a FFF7FEFF 		bl	rcvr_datablock
+ 1150              	.LVL155:
+ 1151 003e 0028     		cmp	r0, #0
+ 1152 0040 43D0     		beq	.L116
+ 488:FatFs_Library/sdcard.c **** 				if ((csd[0] >> 6) == 1) {	/* SDC ver 2.00 */
+ 1153              		.loc 1 488 0 is_stmt 1
+ 1154 0042 9DF80030 		ldrb	r3, [sp]	@ zero_extendqisi2
+ 1155 0046 9B09     		lsrs	r3, r3, #6
+ 1156 0048 012B     		cmp	r3, #1
+ 1157 004a 10D1     		bne	.L111
+ 489:FatFs_Library/sdcard.c **** 					cs = csd[9] + ((WORD)csd[8] << 8) + ((DWORD)(csd[7] & 63) << 16) + 1;
+ 1158              		.loc 1 489 0
+ 1159 004c 9DF80930 		ldrb	r3, [sp, #9]	@ zero_extendqisi2
+ 1160 0050 9DF80820 		ldrb	r2, [sp, #8]	@ zero_extendqisi2
+ 1161 0054 03EB0222 		add	r2, r3, r2, lsl #8
+ 1162 0058 9DF80730 		ldrb	r3, [sp, #7]	@ zero_extendqisi2
+ 1163 005c 1B04     		lsls	r3, r3, #16
+ 1164 005e 03F47C13 		and	r3, r3, #4128768
+ 1165 0062 1344     		add	r3, r3, r2
+ 1166 0064 0133     		adds	r3, r3, #1
+ 1167              	.LVL156:
+ 490:FatFs_Library/sdcard.c **** 					*(DWORD*)buff = cs << 10;
+ 1168              		.loc 1 490 0
+ 1169 0066 9B02     		lsls	r3, r3, #10
+ 1170              	.LVL157:
+ 1171 0068 2B60     		str	r3, [r5]
+ 1172              	.LVL158:
+ 491:FatFs_Library/sdcard.c **** 				} else {					/* SDC ver 1.XX or MMC */
+ 492:FatFs_Library/sdcard.c **** 					n = (csd[5] & 15) + ((csd[10] & 128) >> 7) + ((csd[9] & 3) << 1) + 2;
+ 493:FatFs_Library/sdcard.c **** 					cs = (csd[8] >> 6) + ((WORD)csd[7] << 2) + ((WORD)(csd[6] & 3) << 10) + 1;
+ 494:FatFs_Library/sdcard.c **** 					*(DWORD*)buff = cs << (n - 9);
+ 495:FatFs_Library/sdcard.c **** 				}
+ 496:FatFs_Library/sdcard.c **** 				res = RES_OK;
+ 1173              		.loc 1 496 0
+ 1174 006a 0024     		movs	r4, #0
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqwyLbK.s 			page 31
+
+
+ 1175 006c 2EE0     		b	.L107
+ 1176              	.L111:
+ 492:FatFs_Library/sdcard.c **** 					cs = (csd[8] >> 6) + ((WORD)csd[7] << 2) + ((WORD)(csd[6] & 3) << 10) + 1;
+ 1177              		.loc 1 492 0
+ 1178 006e 9DF80520 		ldrb	r2, [sp, #5]	@ zero_extendqisi2
+ 1179 0072 9DF80A10 		ldrb	r1, [sp, #10]	@ zero_extendqisi2
+ 1180 0076 9DF80930 		ldrb	r3, [sp, #9]	@ zero_extendqisi2
+ 1181 007a 5B00     		lsls	r3, r3, #1
+ 1182 007c 02F00F02 		and	r2, r2, #15
+ 1183 0080 02EBD112 		add	r2, r2, r1, lsr #7
+ 1184 0084 03F00603 		and	r3, r3, #6
+ 1185 0088 1344     		add	r3, r3, r2
+ 1186 008a 0233     		adds	r3, r3, #2
+ 1187 008c DBB2     		uxtb	r3, r3
+ 1188              	.LVL159:
+ 493:FatFs_Library/sdcard.c **** 					*(DWORD*)buff = cs << (n - 9);
+ 1189              		.loc 1 493 0
+ 1190 008e 9DF80810 		ldrb	r1, [sp, #8]	@ zero_extendqisi2
+ 1191 0092 9DF80720 		ldrb	r2, [sp, #7]	@ zero_extendqisi2
+ 1192 0096 9200     		lsls	r2, r2, #2
+ 1193 0098 02EB9111 		add	r1, r2, r1, lsr #6
+ 1194 009c 9DF80620 		ldrb	r2, [sp, #6]	@ zero_extendqisi2
+ 1195 00a0 9202     		lsls	r2, r2, #10
+ 1196 00a2 02F44062 		and	r2, r2, #3072
+ 1197 00a6 0A44     		add	r2, r2, r1
+ 1198 00a8 0132     		adds	r2, r2, #1
+ 1199              	.LVL160:
+ 494:FatFs_Library/sdcard.c **** 				}
+ 1200              		.loc 1 494 0
+ 1201 00aa 093B     		subs	r3, r3, #9
+ 1202              	.LVL161:
+ 1203 00ac 02FA03F3 		lsl	r3, r2, r3
+ 1204              	.LVL162:
+ 1205 00b0 2B60     		str	r3, [r5]
+ 1206              	.LVL163:
+ 1207              		.loc 1 496 0
+ 1208 00b2 0024     		movs	r4, #0
+ 1209 00b4 0AE0     		b	.L107
+ 1210              	.LVL164:
+ 1211              	.L110:
+ 497:FatFs_Library/sdcard.c **** 			}
+ 498:FatFs_Library/sdcard.c **** 			break;
+ 499:FatFs_Library/sdcard.c **** 
+ 500:FatFs_Library/sdcard.c **** 		case GET_BLOCK_SIZE :	/* Get erase block size in unit of sector (DWORD) */
+ 501:FatFs_Library/sdcard.c **** 			*(DWORD*)buff = 128;
+ 1212              		.loc 1 501 0
+ 1213 00b6 8023     		movs	r3, #128
+ 1214 00b8 2B60     		str	r3, [r5]
+ 1215              	.LVL165:
+ 502:FatFs_Library/sdcard.c **** 			res = RES_OK;
+ 1216              		.loc 1 502 0
+ 1217 00ba 0024     		movs	r4, #0
+ 503:FatFs_Library/sdcard.c **** 			break;
+ 1218              		.loc 1 503 0
+ 1219 00bc 06E0     		b	.L107
+ 1220              	.LVL166:
+ 1221              	.L117:
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqwyLbK.s 			page 32
+
+
+ 504:FatFs_Library/sdcard.c **** 
+ 505:FatFs_Library/sdcard.c **** 		default:
+ 506:FatFs_Library/sdcard.c **** 			res = RES_PARERR;
+ 1222              		.loc 1 506 0
+ 1223 00be 0424     		movs	r4, #4
+ 1224 00c0 04E0     		b	.L107
+ 1225              	.L114:
+ 483:FatFs_Library/sdcard.c **** 			break;
+ 1226              		.loc 1 483 0
+ 1227 00c2 0024     		movs	r4, #0
+ 1228 00c4 02E0     		b	.L107
+ 1229              	.L115:
+ 480:FatFs_Library/sdcard.c **** 	switch (ctrl) {
+ 1230              		.loc 1 480 0
+ 1231 00c6 0124     		movs	r4, #1
+ 1232 00c8 00E0     		b	.L107
+ 1233              	.L116:
+ 1234 00ca 0124     		movs	r4, #1
+ 1235              	.LVL167:
+ 1236              	.L107:
+ 507:FatFs_Library/sdcard.c **** 	}
+ 508:FatFs_Library/sdcard.c **** 
+ 509:FatFs_Library/sdcard.c **** 	deselect();
+ 1237              		.loc 1 509 0
+ 1238 00cc FFF7FEFF 		bl	deselect
+ 1239              	.LVL168:
+ 510:FatFs_Library/sdcard.c **** 
+ 511:FatFs_Library/sdcard.c **** 	return res;
+ 1240              		.loc 1 511 0
+ 1241 00d0 2046     		mov	r0, r4
+ 1242 00d2 00E0     		b	.L106
+ 1243              	.LVL169:
+ 1244              	.L112:
+ 478:FatFs_Library/sdcard.c **** 
+ 1245              		.loc 1 478 0
+ 1246 00d4 0320     		movs	r0, #3
+ 1247              	.L106:
+ 512:FatFs_Library/sdcard.c **** }
+ 1248              		.loc 1 512 0
+ 1249 00d6 05B0     		add	sp, sp, #20
+ 1250              		.cfi_def_cfa_offset 12
+ 1251              		@ sp needed
+ 1252 00d8 30BD     		pop	{r4, r5, pc}
+ 1253              		.cfi_endproc
+ 1254              	.LFE75:
+ 1255              		.size	disk_ioctl, .-disk_ioctl
+ 1256 00da 00BF     		.data
+ 1257              		.set	.LANCHOR0,. + 0
+ 1258              		.type	Stat, %object
+ 1259              		.size	Stat, 1
+ 1260              	Stat:
+ 1261 0000 01       		.byte	1
+ 1262              		.bss
+ 1263              		.set	.LANCHOR1,. + 0
+ 1264              		.type	CardType, %object
+ 1265              		.size	CardType, 1
+ 1266              	CardType:
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqwyLbK.s 			page 33
+
+
+ 1267 0000 00       		.space	1
+ 1268              		.text
+ 1269              	.Letext0:
+ 1270              		.file 2 "FatFs_Library\\integer.h"
+ 1271              		.file 3 "FatFs_Library\\diskio.h"
+ 1272              		.file 4 "c:\\program files (x86)\\cypress\\psoc creator\\4.2\\psoc creator\\import\\gnu\\arm\\5.4.
+ 1273              		.file 5 "c:\\program files (x86)\\cypress\\psoc creator\\4.2\\psoc creator\\import\\gnu\\arm\\5.4.
+ 1274              		.file 6 "Generated_Source\\PSoC5/SPI.h"
+ 1275              		.file 7 "Generated_Source\\PSoC5/CyLib.h"
+ 1276              		.file 8 "Generated_Source\\PSoC5/SPI_SS.h"
+ 1277              		.file 9 "Generated_Source\\PSoC5/core_cm3.h"
+ 1278              		.section	.debug_info,"",%progbits
+ 1279              	.Ldebug_info0:
+ 1280 0000 010B0000 		.4byte	0xb01
+ 1281 0004 0400     		.2byte	0x4
+ 1282 0006 00000000 		.4byte	.Ldebug_abbrev0
+ 1283 000a 04       		.byte	0x4
+ 1284 000b 01       		.uleb128 0x1
+ 1285 000c 14010000 		.4byte	.LASF55
+ 1286 0010 0C       		.byte	0xc
+ 1287 0011 20020000 		.4byte	.LASF56
+ 1288 0015 E5010000 		.4byte	.LASF57
+ 1289 0019 00000000 		.4byte	.Ldebug_ranges0+0
+ 1290 001d 00000000 		.4byte	0
+ 1291 0021 00000000 		.4byte	.Ldebug_line0
+ 1292 0025 02       		.uleb128 0x2
+ 1293 0026 5A000000 		.4byte	.LASF2
+ 1294 002a 02       		.byte	0x2
+ 1295 002b 10       		.byte	0x10
+ 1296 002c 30000000 		.4byte	0x30
+ 1297 0030 03       		.uleb128 0x3
+ 1298 0031 01       		.byte	0x1
+ 1299 0032 08       		.byte	0x8
+ 1300 0033 EA000000 		.4byte	.LASF0
+ 1301 0037 03       		.uleb128 0x3
+ 1302 0038 02       		.byte	0x2
+ 1303 0039 05       		.byte	0x5
+ 1304 003a 20000000 		.4byte	.LASF1
+ 1305 003e 02       		.uleb128 0x2
+ 1306 003f E5000000 		.4byte	.LASF3
+ 1307 0043 02       		.byte	0x2
+ 1308 0044 14       		.byte	0x14
+ 1309 0045 49000000 		.4byte	0x49
+ 1310 0049 03       		.uleb128 0x3
+ 1311 004a 02       		.byte	0x2
+ 1312 004b 07       		.byte	0x7
+ 1313 004c 56020000 		.4byte	.LASF4
+ 1314 0050 04       		.uleb128 0x4
+ 1315 0051 04       		.byte	0x4
+ 1316 0052 05       		.byte	0x5
+ 1317 0053 696E7400 		.ascii	"int\000"
+ 1318 0057 02       		.uleb128 0x2
+ 1319 0058 CA000000 		.4byte	.LASF5
+ 1320 005c 02       		.byte	0x2
+ 1321 005d 19       		.byte	0x19
+ 1322 005e 62000000 		.4byte	0x62
+ 1323 0062 03       		.uleb128 0x3
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqwyLbK.s 			page 34
+
+
+ 1324 0063 04       		.byte	0x4
+ 1325 0064 07       		.byte	0x7
+ 1326 0065 D8010000 		.4byte	.LASF6
+ 1327 0069 03       		.uleb128 0x3
+ 1328 006a 04       		.byte	0x4
+ 1329 006b 05       		.byte	0x5
+ 1330 006c A7000000 		.4byte	.LASF7
+ 1331 0070 02       		.uleb128 0x2
+ 1332 0071 F8000000 		.4byte	.LASF8
+ 1333 0075 02       		.byte	0x2
+ 1334 0076 1D       		.byte	0x1d
+ 1335 0077 7B000000 		.4byte	0x7b
+ 1336 007b 03       		.uleb128 0x3
+ 1337 007c 04       		.byte	0x4
+ 1338 007d 07       		.byte	0x7
+ 1339 007e 9B020000 		.4byte	.LASF9
+ 1340 0082 02       		.uleb128 0x2
+ 1341 0083 0D030000 		.4byte	.LASF10
+ 1342 0087 03       		.byte	0x3
+ 1343 0088 13       		.byte	0x13
+ 1344 0089 25000000 		.4byte	0x25
+ 1345 008d 05       		.uleb128 0x5
+ 1346 008e 01       		.byte	0x1
+ 1347 008f 30000000 		.4byte	0x30
+ 1348 0093 03       		.byte	0x3
+ 1349 0094 16       		.byte	0x16
+ 1350 0095 B8000000 		.4byte	0xb8
+ 1351 0099 06       		.uleb128 0x6
+ 1352 009a 19000000 		.4byte	.LASF11
+ 1353 009e 00       		.byte	0
+ 1354 009f 06       		.uleb128 0x6
+ 1355 00a0 0F000000 		.4byte	.LASF12
+ 1356 00a4 01       		.byte	0x1
+ 1357 00a5 06       		.uleb128 0x6
+ 1358 00a6 B0000000 		.4byte	.LASF13
+ 1359 00aa 02       		.byte	0x2
+ 1360 00ab 06       		.uleb128 0x6
+ 1361 00ac 90020000 		.4byte	.LASF14
+ 1362 00b0 03       		.byte	0x3
+ 1363 00b1 06       		.uleb128 0x6
+ 1364 00b2 22030000 		.4byte	.LASF15
+ 1365 00b6 04       		.byte	0x4
+ 1366 00b7 00       		.byte	0
+ 1367 00b8 02       		.uleb128 0x2
+ 1368 00b9 F0020000 		.4byte	.LASF16
+ 1369 00bd 03       		.byte	0x3
+ 1370 00be 1C       		.byte	0x1c
+ 1371 00bf 8D000000 		.4byte	0x8d
+ 1372 00c3 03       		.uleb128 0x3
+ 1373 00c4 01       		.byte	0x1
+ 1374 00c5 06       		.byte	0x6
+ 1375 00c6 B5010000 		.4byte	.LASF17
+ 1376 00ca 02       		.uleb128 0x2
+ 1377 00cb E6020000 		.4byte	.LASF18
+ 1378 00cf 04       		.byte	0x4
+ 1379 00d0 3F       		.byte	0x3f
+ 1380 00d1 69000000 		.4byte	0x69
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqwyLbK.s 			page 35
+
+
+ 1381 00d5 03       		.uleb128 0x3
+ 1382 00d6 08       		.byte	0x8
+ 1383 00d7 05       		.byte	0x5
+ 1384 00d8 99000000 		.4byte	.LASF19
+ 1385 00dc 03       		.uleb128 0x3
+ 1386 00dd 08       		.byte	0x8
+ 1387 00de 07       		.byte	0x7
+ 1388 00df C1010000 		.4byte	.LASF20
+ 1389 00e3 02       		.uleb128 0x2
+ 1390 00e4 88020000 		.4byte	.LASF21
+ 1391 00e8 05       		.byte	0x5
+ 1392 00e9 2C       		.byte	0x2c
+ 1393 00ea CA000000 		.4byte	0xca
+ 1394 00ee 03       		.uleb128 0x3
+ 1395 00ef 04       		.byte	0x4
+ 1396 00f0 04       		.byte	0x4
+ 1397 00f1 93000000 		.4byte	.LASF22
+ 1398 00f5 03       		.uleb128 0x3
+ 1399 00f6 08       		.byte	0x8
+ 1400 00f7 04       		.byte	0x4
+ 1401 00f8 06030000 		.4byte	.LASF23
+ 1402 00fc 03       		.uleb128 0x3
+ 1403 00fd 01       		.byte	0x1
+ 1404 00fe 08       		.byte	0x8
+ 1405 00ff 74020000 		.4byte	.LASF24
+ 1406 0103 03       		.uleb128 0x3
+ 1407 0104 08       		.byte	0x8
+ 1408 0105 04       		.byte	0x4
+ 1409 0106 FE000000 		.4byte	.LASF25
+ 1410 010a 03       		.uleb128 0x3
+ 1411 010b 04       		.byte	0x4
+ 1412 010c 07       		.byte	0x7
+ 1413 010d F8020000 		.4byte	.LASF26
+ 1414 0111 07       		.uleb128 0x7
+ 1415 0112 04       		.byte	0x4
+ 1416 0113 08       		.uleb128 0x8
+ 1417 0114 06000000 		.4byte	.LASF28
+ 1418 0118 01       		.byte	0x1
+ 1419 0119 75       		.byte	0x75
+ 1420 011a 00000000 		.4byte	.LFB63
+ 1421 011e 28000000 		.4byte	.LFE63-.LFB63
+ 1422 0122 01       		.uleb128 0x1
+ 1423 0123 9C       		.byte	0x9c
+ 1424 0124 79010000 		.4byte	0x179
+ 1425 0128 09       		.uleb128 0x9
+ 1426 0129 55000000 		.4byte	.LASF27
+ 1427 012d 01       		.byte	0x1
+ 1428 012e 75       		.byte	0x75
+ 1429 012f 79010000 		.4byte	0x179
+ 1430 0133 00000000 		.4byte	.LLST0
+ 1431 0137 0A       		.uleb128 0xa
+ 1432 0138 626300   		.ascii	"bc\000"
+ 1433 013b 01       		.byte	0x1
+ 1434 013c 75       		.byte	0x75
+ 1435 013d 57000000 		.4byte	0x57
+ 1436 0141 1E000000 		.4byte	.LLST1
+ 1437 0145 0B       		.uleb128 0xb
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqwyLbK.s 			page 36
+
+
+ 1438 0146 01030000 		.4byte	.LASF30
+ 1439 014a 01       		.byte	0x1
+ 1440 014b 84       		.byte	0x84
+ 1441 014c 57000000 		.4byte	0x57
+ 1442 0150 3C000000 		.4byte	.LLST2
+ 1443 0154 0C       		.uleb128 0xc
+ 1444 0155 0A000000 		.4byte	.LVL1
+ 1445 0159 B70A0000 		.4byte	0xab7
+ 1446 015d 0C       		.uleb128 0xc
+ 1447 015e 0E000000 		.4byte	.LVL2
+ 1448 0162 C20A0000 		.4byte	0xac2
+ 1449 0166 0C       		.uleb128 0xc
+ 1450 0167 18000000 		.4byte	.LVL4
+ 1451 016b CD0A0000 		.4byte	0xacd
+ 1452 016f 0C       		.uleb128 0xc
+ 1453 0170 22000000 		.4byte	.LVL6
+ 1454 0174 D80A0000 		.4byte	0xad8
+ 1455 0178 00       		.byte	0
+ 1456 0179 0D       		.uleb128 0xd
+ 1457 017a 04       		.byte	0x4
+ 1458 017b 7F010000 		.4byte	0x17f
+ 1459 017f 0E       		.uleb128 0xe
+ 1460 0180 25000000 		.4byte	0x25
+ 1461 0184 08       		.uleb128 0x8
+ 1462 0185 83000000 		.4byte	.LASF29
+ 1463 0189 01       		.byte	0x1
+ 1464 018a 97       		.byte	0x97
+ 1465 018b 00000000 		.4byte	.LFB64
+ 1466 018f 34000000 		.4byte	.LFE64-.LFB64
+ 1467 0193 01       		.uleb128 0x1
+ 1468 0194 9C       		.byte	0x9c
+ 1469 0195 02020000 		.4byte	0x202
+ 1470 0199 09       		.uleb128 0x9
+ 1471 019a 55000000 		.4byte	.LASF27
+ 1472 019e 01       		.byte	0x1
+ 1473 019f 97       		.byte	0x97
+ 1474 01a0 02020000 		.4byte	0x202
+ 1475 01a4 5B000000 		.4byte	.LLST3
+ 1476 01a8 0A       		.uleb128 0xa
+ 1477 01a9 626300   		.ascii	"bc\000"
+ 1478 01ac 01       		.byte	0x1
+ 1479 01ad 97       		.byte	0x97
+ 1480 01ae 57000000 		.4byte	0x57
+ 1481 01b2 9A000000 		.4byte	.LLST4
+ 1482 01b6 0C       		.uleb128 0xc
+ 1483 01b7 0A000000 		.4byte	.LVL8
+ 1484 01bb B70A0000 		.4byte	0xab7
+ 1485 01bf 0C       		.uleb128 0xc
+ 1486 01c0 0E000000 		.4byte	.LVL9
+ 1487 01c4 C20A0000 		.4byte	0xac2
+ 1488 01c8 0F       		.uleb128 0xf
+ 1489 01c9 18000000 		.4byte	.LVL12
+ 1490 01cd CD0A0000 		.4byte	0xacd
+ 1491 01d1 DC010000 		.4byte	0x1dc
+ 1492 01d5 10       		.uleb128 0x10
+ 1493 01d6 01       		.uleb128 0x1
+ 1494 01d7 50       		.byte	0x50
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqwyLbK.s 			page 37
+
+
+ 1495 01d8 02       		.uleb128 0x2
+ 1496 01d9 09       		.byte	0x9
+ 1497 01da FF       		.byte	0xff
+ 1498 01db 00       		.byte	0
+ 1499 01dc 0C       		.uleb128 0xc
+ 1500 01dd 1C000000 		.4byte	.LVL13
+ 1501 01e1 D80A0000 		.4byte	0xad8
+ 1502 01e5 0F       		.uleb128 0xf
+ 1503 01e6 26000000 		.4byte	.LVL14
+ 1504 01ea E30A0000 		.4byte	0xae3
+ 1505 01ee F8010000 		.4byte	0x1f8
+ 1506 01f2 10       		.uleb128 0x10
+ 1507 01f3 01       		.uleb128 0x1
+ 1508 01f4 50       		.byte	0x50
+ 1509 01f5 01       		.uleb128 0x1
+ 1510 01f6 3A       		.byte	0x3a
+ 1511 01f7 00       		.byte	0
+ 1512 01f8 0C       		.uleb128 0xc
+ 1513 01f9 2C000000 		.4byte	.LVL16
+ 1514 01fd EE0A0000 		.4byte	0xaee
+ 1515 0201 00       		.byte	0
+ 1516 0202 0D       		.uleb128 0xd
+ 1517 0203 04       		.byte	0x4
+ 1518 0204 25000000 		.4byte	0x25
+ 1519 0208 11       		.uleb128 0x11
+ 1520 0209 36030000 		.4byte	.LASF31
+ 1521 020d 01       		.byte	0x1
+ 1522 020e C4       		.byte	0xc4
+ 1523 020f 50000000 		.4byte	0x50
+ 1524 0213 00000000 		.4byte	.LFB65
+ 1525 0217 32000000 		.4byte	.LFE65-.LFB65
+ 1526 021b 01       		.uleb128 0x1
+ 1527 021c 9C       		.byte	0x9c
+ 1528 021d 66020000 		.4byte	0x266
+ 1529 0221 12       		.uleb128 0x12
+ 1530 0222 6400     		.ascii	"d\000"
+ 1531 0224 01       		.byte	0x1
+ 1532 0225 C6       		.byte	0xc6
+ 1533 0226 25000000 		.4byte	0x25
+ 1534 022a 02       		.uleb128 0x2
+ 1535 022b 91       		.byte	0x91
+ 1536 022c 77       		.sleb128 -9
+ 1537 022d 13       		.uleb128 0x13
+ 1538 022e 746D7200 		.ascii	"tmr\000"
+ 1539 0232 01       		.byte	0x1
+ 1540 0233 C7       		.byte	0xc7
+ 1541 0234 57000000 		.4byte	0x57
+ 1542 0238 D0000000 		.4byte	.LLST5
+ 1543 023c 0F       		.uleb128 0xf
+ 1544 023d 14000000 		.4byte	.LVL21
+ 1545 0241 84010000 		.4byte	0x184
+ 1546 0245 55020000 		.4byte	0x255
+ 1547 0249 10       		.uleb128 0x10
+ 1548 024a 01       		.uleb128 0x1
+ 1549 024b 50       		.byte	0x50
+ 1550 024c 02       		.uleb128 0x2
+ 1551 024d 91       		.byte	0x91
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqwyLbK.s 			page 38
+
+
+ 1552 024e 77       		.sleb128 -9
+ 1553 024f 10       		.uleb128 0x10
+ 1554 0250 01       		.uleb128 0x1
+ 1555 0251 51       		.byte	0x51
+ 1556 0252 01       		.uleb128 0x1
+ 1557 0253 31       		.byte	0x31
+ 1558 0254 00       		.byte	0
+ 1559 0255 14       		.uleb128 0x14
+ 1560 0256 22000000 		.4byte	.LVL22
+ 1561 025a E30A0000 		.4byte	0xae3
+ 1562 025e 10       		.uleb128 0x10
+ 1563 025f 01       		.uleb128 0x1
+ 1564 0260 50       		.byte	0x50
+ 1565 0261 02       		.uleb128 0x2
+ 1566 0262 08       		.byte	0x8
+ 1567 0263 64       		.byte	0x64
+ 1568 0264 00       		.byte	0
+ 1569 0265 00       		.byte	0
+ 1570 0266 11       		.uleb128 0x11
+ 1571 0267 79020000 		.4byte	.LASF32
+ 1572 026b 01       		.byte	0x1
+ 1573 026c F4       		.byte	0xf4
+ 1574 026d 50000000 		.4byte	0x50
+ 1575 0271 00000000 		.4byte	.LFB68
+ 1576 0275 4C000000 		.4byte	.LFE68-.LFB68
+ 1577 0279 01       		.uleb128 0x1
+ 1578 027a 9C       		.byte	0x9c
+ 1579 027b 15030000 		.4byte	0x315
+ 1580 027f 09       		.uleb128 0x9
+ 1581 0280 55000000 		.4byte	.LASF27
+ 1582 0284 01       		.byte	0x1
+ 1583 0285 F4       		.byte	0xf4
+ 1584 0286 02020000 		.4byte	0x202
+ 1585 028a F1000000 		.4byte	.LLST6
+ 1586 028e 0A       		.uleb128 0xa
+ 1587 028f 62747200 		.ascii	"btr\000"
+ 1588 0293 01       		.byte	0x1
+ 1589 0294 F4       		.byte	0xf4
+ 1590 0295 57000000 		.4byte	0x57
+ 1591 0299 0F010000 		.4byte	.LLST7
+ 1592 029d 12       		.uleb128 0x12
+ 1593 029e 6400     		.ascii	"d\000"
+ 1594 02a0 01       		.byte	0x1
+ 1595 02a1 F6       		.byte	0xf6
+ 1596 02a2 15030000 		.4byte	0x315
+ 1597 02a6 02       		.uleb128 0x2
+ 1598 02a7 91       		.byte	0x91
+ 1599 02a8 6C       		.sleb128 -20
+ 1600 02a9 13       		.uleb128 0x13
+ 1601 02aa 746D7200 		.ascii	"tmr\000"
+ 1602 02ae 01       		.byte	0x1
+ 1603 02af F7       		.byte	0xf7
+ 1604 02b0 57000000 		.4byte	0x57
+ 1605 02b4 2D010000 		.4byte	.LLST8
+ 1606 02b8 0F       		.uleb128 0xf
+ 1607 02b9 16000000 		.4byte	.LVL27
+ 1608 02bd 84010000 		.4byte	0x184
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqwyLbK.s 			page 39
+
+
+ 1609 02c1 D1020000 		.4byte	0x2d1
+ 1610 02c5 10       		.uleb128 0x10
+ 1611 02c6 01       		.uleb128 0x1
+ 1612 02c7 50       		.byte	0x50
+ 1613 02c8 02       		.uleb128 0x2
+ 1614 02c9 91       		.byte	0x91
+ 1615 02ca 6C       		.sleb128 -20
+ 1616 02cb 10       		.uleb128 0x10
+ 1617 02cc 01       		.uleb128 0x1
+ 1618 02cd 51       		.byte	0x51
+ 1619 02ce 01       		.uleb128 0x1
+ 1620 02cf 31       		.byte	0x31
+ 1621 02d0 00       		.byte	0
+ 1622 02d1 0F       		.uleb128 0xf
+ 1623 02d2 24000000 		.4byte	.LVL28
+ 1624 02d6 E30A0000 		.4byte	0xae3
+ 1625 02da E5020000 		.4byte	0x2e5
+ 1626 02de 10       		.uleb128 0x10
+ 1627 02df 01       		.uleb128 0x1
+ 1628 02e0 50       		.byte	0x50
+ 1629 02e1 02       		.uleb128 0x2
+ 1630 02e2 08       		.byte	0x8
+ 1631 02e3 64       		.byte	0x64
+ 1632 02e4 00       		.byte	0
+ 1633 02e5 0F       		.uleb128 0xf
+ 1634 02e6 3A000000 		.4byte	.LVL30
+ 1635 02ea 84010000 		.4byte	0x184
+ 1636 02ee FF020000 		.4byte	0x2ff
+ 1637 02f2 10       		.uleb128 0x10
+ 1638 02f3 01       		.uleb128 0x1
+ 1639 02f4 50       		.byte	0x50
+ 1640 02f5 02       		.uleb128 0x2
+ 1641 02f6 75       		.byte	0x75
+ 1642 02f7 00       		.sleb128 0
+ 1643 02f8 10       		.uleb128 0x10
+ 1644 02f9 01       		.uleb128 0x1
+ 1645 02fa 51       		.byte	0x51
+ 1646 02fb 02       		.uleb128 0x2
+ 1647 02fc 76       		.byte	0x76
+ 1648 02fd 00       		.sleb128 0
+ 1649 02fe 00       		.byte	0
+ 1650 02ff 14       		.uleb128 0x14
+ 1651 0300 42000000 		.4byte	.LVL31
+ 1652 0304 84010000 		.4byte	0x184
+ 1653 0308 10       		.uleb128 0x10
+ 1654 0309 01       		.uleb128 0x1
+ 1655 030a 50       		.byte	0x50
+ 1656 030b 02       		.uleb128 0x2
+ 1657 030c 91       		.byte	0x91
+ 1658 030d 6C       		.sleb128 -20
+ 1659 030e 10       		.uleb128 0x10
+ 1660 030f 01       		.uleb128 0x1
+ 1661 0310 51       		.byte	0x51
+ 1662 0311 01       		.uleb128 0x1
+ 1663 0312 32       		.byte	0x32
+ 1664 0313 00       		.byte	0
+ 1665 0314 00       		.byte	0
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqwyLbK.s 			page 40
+
+
+ 1666 0315 15       		.uleb128 0x15
+ 1667 0316 25000000 		.4byte	0x25
+ 1668 031a 25030000 		.4byte	0x325
+ 1669 031e 16       		.uleb128 0x16
+ 1670 031f 0A010000 		.4byte	0x10a
+ 1671 0323 01       		.byte	0x1
+ 1672 0324 00       		.byte	0
+ 1673 0325 17       		.uleb128 0x17
+ 1674 0326 C4020000 		.4byte	.LASF33
+ 1675 032a 01       		.byte	0x1
+ 1676 032b 0A01     		.2byte	0x10a
+ 1677 032d 50000000 		.4byte	0x50
+ 1678 0331 00000000 		.4byte	.LFB69
+ 1679 0335 62000000 		.4byte	.LFE69-.LFB69
+ 1680 0339 01       		.uleb128 0x1
+ 1681 033a 9C       		.byte	0x9c
+ 1682 033b FE030000 		.4byte	0x3fe
+ 1683 033f 18       		.uleb128 0x18
+ 1684 0340 55000000 		.4byte	.LASF27
+ 1685 0344 01       		.byte	0x1
+ 1686 0345 0A01     		.2byte	0x10a
+ 1687 0347 79010000 		.4byte	0x179
+ 1688 034b 4E010000 		.4byte	.LLST9
+ 1689 034f 18       		.uleb128 0x18
+ 1690 0350 00000000 		.4byte	.LASF34
+ 1691 0354 01       		.byte	0x1
+ 1692 0355 0A01     		.2byte	0x10a
+ 1693 0357 25000000 		.4byte	0x25
+ 1694 035b 6C010000 		.4byte	.LLST10
+ 1695 035f 19       		.uleb128 0x19
+ 1696 0360 6400     		.ascii	"d\000"
+ 1697 0362 01       		.byte	0x1
+ 1698 0363 0C01     		.2byte	0x10c
+ 1699 0365 15030000 		.4byte	0x315
+ 1700 0369 02       		.uleb128 0x2
+ 1701 036a 91       		.byte	0x91
+ 1702 036b 6C       		.sleb128 -20
+ 1703 036c 0C       		.uleb128 0xc
+ 1704 036d 0C000000 		.4byte	.LVL33
+ 1705 0371 08020000 		.4byte	0x208
+ 1706 0375 0F       		.uleb128 0xf
+ 1707 0376 1C000000 		.4byte	.LVL34
+ 1708 037a 13010000 		.4byte	0x113
+ 1709 037e 8E030000 		.4byte	0x38e
+ 1710 0382 10       		.uleb128 0x10
+ 1711 0383 01       		.uleb128 0x1
+ 1712 0384 50       		.byte	0x50
+ 1713 0385 02       		.uleb128 0x2
+ 1714 0386 91       		.byte	0x91
+ 1715 0387 6C       		.sleb128 -20
+ 1716 0388 10       		.uleb128 0x10
+ 1717 0389 01       		.uleb128 0x1
+ 1718 038a 51       		.byte	0x51
+ 1719 038b 01       		.uleb128 0x1
+ 1720 038c 31       		.byte	0x31
+ 1721 038d 00       		.byte	0
+ 1722 038e 0F       		.uleb128 0xf
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqwyLbK.s 			page 41
+
+
+ 1723 038f 22000000 		.4byte	.LVL35
+ 1724 0393 E30A0000 		.4byte	0xae3
+ 1725 0397 A1030000 		.4byte	0x3a1
+ 1726 039b 10       		.uleb128 0x10
+ 1727 039c 01       		.uleb128 0x1
+ 1728 039d 50       		.byte	0x50
+ 1729 039e 01       		.uleb128 0x1
+ 1730 039f 3A       		.byte	0x3a
+ 1731 03a0 00       		.byte	0
+ 1732 03a1 0F       		.uleb128 0xf
+ 1733 03a2 30000000 		.4byte	.LVL36
+ 1734 03a6 13010000 		.4byte	0x113
+ 1735 03aa BC030000 		.4byte	0x3bc
+ 1736 03ae 10       		.uleb128 0x10
+ 1737 03af 01       		.uleb128 0x1
+ 1738 03b0 50       		.byte	0x50
+ 1739 03b1 02       		.uleb128 0x2
+ 1740 03b2 75       		.byte	0x75
+ 1741 03b3 00       		.sleb128 0
+ 1742 03b4 10       		.uleb128 0x10
+ 1743 03b5 01       		.uleb128 0x1
+ 1744 03b6 51       		.byte	0x51
+ 1745 03b7 03       		.uleb128 0x3
+ 1746 03b8 0A       		.byte	0xa
+ 1747 03b9 0002     		.2byte	0x200
+ 1748 03bb 00       		.byte	0
+ 1749 03bc 0F       		.uleb128 0xf
+ 1750 03bd 36000000 		.4byte	.LVL37
+ 1751 03c1 E30A0000 		.4byte	0xae3
+ 1752 03c5 CF030000 		.4byte	0x3cf
+ 1753 03c9 10       		.uleb128 0x10
+ 1754 03ca 01       		.uleb128 0x1
+ 1755 03cb 50       		.byte	0x50
+ 1756 03cc 01       		.uleb128 0x1
+ 1757 03cd 3A       		.byte	0x3a
+ 1758 03ce 00       		.byte	0
+ 1759 03cf 0F       		.uleb128 0xf
+ 1760 03d0 3E000000 		.4byte	.LVL38
+ 1761 03d4 84010000 		.4byte	0x184
+ 1762 03d8 E8030000 		.4byte	0x3e8
+ 1763 03dc 10       		.uleb128 0x10
+ 1764 03dd 01       		.uleb128 0x1
+ 1765 03de 50       		.byte	0x50
+ 1766 03df 02       		.uleb128 0x2
+ 1767 03e0 91       		.byte	0x91
+ 1768 03e1 6C       		.sleb128 -20
+ 1769 03e2 10       		.uleb128 0x10
+ 1770 03e3 01       		.uleb128 0x1
+ 1771 03e4 51       		.byte	0x51
+ 1772 03e5 01       		.uleb128 0x1
+ 1773 03e6 32       		.byte	0x32
+ 1774 03e7 00       		.byte	0
+ 1775 03e8 14       		.uleb128 0x14
+ 1776 03e9 46000000 		.4byte	.LVL39
+ 1777 03ed 84010000 		.4byte	0x184
+ 1778 03f1 10       		.uleb128 0x10
+ 1779 03f2 01       		.uleb128 0x1
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqwyLbK.s 			page 42
+
+
+ 1780 03f3 50       		.byte	0x50
+ 1781 03f4 02       		.uleb128 0x2
+ 1782 03f5 91       		.byte	0x91
+ 1783 03f6 6C       		.sleb128 -20
+ 1784 03f7 10       		.uleb128 0x10
+ 1785 03f8 01       		.uleb128 0x1
+ 1786 03f9 51       		.byte	0x51
+ 1787 03fa 01       		.uleb128 0x1
+ 1788 03fb 31       		.byte	0x31
+ 1789 03fc 00       		.byte	0
+ 1790 03fd 00       		.byte	0
+ 1791 03fe 08       		.uleb128 0x8
+ 1792 03ff 68000000 		.4byte	.LASF35
+ 1793 0403 01       		.byte	0x1
+ 1794 0404 D6       		.byte	0xd6
+ 1795 0405 00000000 		.4byte	.LFB66
+ 1796 0409 20000000 		.4byte	.LFE66-.LFB66
+ 1797 040d 01       		.uleb128 0x1
+ 1798 040e 9C       		.byte	0x9c
+ 1799 040f 5B040000 		.4byte	0x45b
+ 1800 0413 12       		.uleb128 0x12
+ 1801 0414 6400     		.ascii	"d\000"
+ 1802 0416 01       		.byte	0x1
+ 1803 0417 D8       		.byte	0xd8
+ 1804 0418 25000000 		.4byte	0x25
+ 1805 041c 02       		.uleb128 0x2
+ 1806 041d 91       		.byte	0x91
+ 1807 041e 77       		.sleb128 -9
+ 1808 041f 0F       		.uleb128 0xf
+ 1809 0420 0A000000 		.4byte	.LVL40
+ 1810 0424 F90A0000 		.4byte	0xaf9
+ 1811 0428 32040000 		.4byte	0x432
+ 1812 042c 10       		.uleb128 0x10
+ 1813 042d 01       		.uleb128 0x1
+ 1814 042e 50       		.byte	0x50
+ 1815 042f 01       		.uleb128 0x1
+ 1816 0430 31       		.byte	0x31
+ 1817 0431 00       		.byte	0
+ 1818 0432 0F       		.uleb128 0xf
+ 1819 0433 10000000 		.4byte	.LVL41
+ 1820 0437 E30A0000 		.4byte	0xae3
+ 1821 043b 45040000 		.4byte	0x445
+ 1822 043f 10       		.uleb128 0x10
+ 1823 0440 01       		.uleb128 0x1
+ 1824 0441 50       		.byte	0x50
+ 1825 0442 01       		.uleb128 0x1
+ 1826 0443 31       		.byte	0x31
+ 1827 0444 00       		.byte	0
+ 1828 0445 14       		.uleb128 0x14
+ 1829 0446 1A000000 		.4byte	.LVL42
+ 1830 044a 84010000 		.4byte	0x184
+ 1831 044e 10       		.uleb128 0x10
+ 1832 044f 01       		.uleb128 0x1
+ 1833 0450 50       		.byte	0x50
+ 1834 0451 02       		.uleb128 0x2
+ 1835 0452 91       		.byte	0x91
+ 1836 0453 77       		.sleb128 -9
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqwyLbK.s 			page 43
+
+
+ 1837 0454 10       		.uleb128 0x10
+ 1838 0455 01       		.uleb128 0x1
+ 1839 0456 51       		.byte	0x51
+ 1840 0457 01       		.uleb128 0x1
+ 1841 0458 31       		.byte	0x31
+ 1842 0459 00       		.byte	0
+ 1843 045a 00       		.byte	0
+ 1844 045b 11       		.uleb128 0x11
+ 1845 045c 4E000000 		.4byte	.LASF36
+ 1846 0460 01       		.byte	0x1
+ 1847 0461 E3       		.byte	0xe3
+ 1848 0462 50000000 		.4byte	0x50
+ 1849 0466 00000000 		.4byte	.LFB67
+ 1850 046a 30000000 		.4byte	.LFE67-.LFB67
+ 1851 046e 01       		.uleb128 0x1
+ 1852 046f 9C       		.byte	0x9c
+ 1853 0470 D2040000 		.4byte	0x4d2
+ 1854 0474 12       		.uleb128 0x12
+ 1855 0475 6400     		.ascii	"d\000"
+ 1856 0477 01       		.byte	0x1
+ 1857 0478 E5       		.byte	0xe5
+ 1858 0479 25000000 		.4byte	0x25
+ 1859 047d 02       		.uleb128 0x2
+ 1860 047e 91       		.byte	0x91
+ 1861 047f 77       		.sleb128 -9
+ 1862 0480 0F       		.uleb128 0xf
+ 1863 0481 0A000000 		.4byte	.LVL43
+ 1864 0485 F90A0000 		.4byte	0xaf9
+ 1865 0489 93040000 		.4byte	0x493
+ 1866 048d 10       		.uleb128 0x10
+ 1867 048e 01       		.uleb128 0x1
+ 1868 048f 50       		.byte	0x50
+ 1869 0490 01       		.uleb128 0x1
+ 1870 0491 30       		.byte	0x30
+ 1871 0492 00       		.byte	0
+ 1872 0493 0F       		.uleb128 0xf
+ 1873 0494 10000000 		.4byte	.LVL44
+ 1874 0498 E30A0000 		.4byte	0xae3
+ 1875 049c A6040000 		.4byte	0x4a6
+ 1876 04a0 10       		.uleb128 0x10
+ 1877 04a1 01       		.uleb128 0x1
+ 1878 04a2 50       		.byte	0x50
+ 1879 04a3 01       		.uleb128 0x1
+ 1880 04a4 31       		.byte	0x31
+ 1881 04a5 00       		.byte	0
+ 1882 04a6 0F       		.uleb128 0xf
+ 1883 04a7 1A000000 		.4byte	.LVL45
+ 1884 04ab 84010000 		.4byte	0x184
+ 1885 04af BF040000 		.4byte	0x4bf
+ 1886 04b3 10       		.uleb128 0x10
+ 1887 04b4 01       		.uleb128 0x1
+ 1888 04b5 50       		.byte	0x50
+ 1889 04b6 02       		.uleb128 0x2
+ 1890 04b7 91       		.byte	0x91
+ 1891 04b8 77       		.sleb128 -9
+ 1892 04b9 10       		.uleb128 0x10
+ 1893 04ba 01       		.uleb128 0x1
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqwyLbK.s 			page 44
+
+
+ 1894 04bb 51       		.byte	0x51
+ 1895 04bc 01       		.uleb128 0x1
+ 1896 04bd 31       		.byte	0x31
+ 1897 04be 00       		.byte	0
+ 1898 04bf 0C       		.uleb128 0xc
+ 1899 04c0 1E000000 		.4byte	.LVL46
+ 1900 04c4 08020000 		.4byte	0x208
+ 1901 04c8 0C       		.uleb128 0xc
+ 1902 04c9 26000000 		.4byte	.LVL47
+ 1903 04cd FE030000 		.4byte	0x3fe
+ 1904 04d1 00       		.byte	0
+ 1905 04d2 17       		.uleb128 0x17
+ 1906 04d3 2D030000 		.4byte	.LASF37
+ 1907 04d7 01       		.byte	0x1
+ 1908 04d8 2301     		.2byte	0x123
+ 1909 04da 25000000 		.4byte	0x25
+ 1910 04de 00000000 		.4byte	.LFB70
+ 1911 04e2 A2000000 		.4byte	.LFE70-.LFB70
+ 1912 04e6 01       		.uleb128 0x1
+ 1913 04e7 9C       		.byte	0x9c
+ 1914 04e8 BC050000 		.4byte	0x5bc
+ 1915 04ec 1A       		.uleb128 0x1a
+ 1916 04ed 636D6400 		.ascii	"cmd\000"
+ 1917 04f1 01       		.byte	0x1
+ 1918 04f2 2301     		.2byte	0x123
+ 1919 04f4 25000000 		.4byte	0x25
+ 1920 04f8 8D010000 		.4byte	.LLST11
+ 1921 04fc 1A       		.uleb128 0x1a
+ 1922 04fd 61726700 		.ascii	"arg\000"
+ 1923 0501 01       		.byte	0x1
+ 1924 0502 2301     		.2byte	0x123
+ 1925 0504 70000000 		.4byte	0x70
+ 1926 0508 B6010000 		.4byte	.LLST12
+ 1927 050c 1B       		.uleb128 0x1b
+ 1928 050d 6E00     		.ascii	"n\000"
+ 1929 050f 01       		.byte	0x1
+ 1930 0510 2501     		.2byte	0x125
+ 1931 0512 25000000 		.4byte	0x25
+ 1932 0516 D4010000 		.4byte	.LLST13
+ 1933 051a 19       		.uleb128 0x19
+ 1934 051b 6400     		.ascii	"d\000"
+ 1935 051d 01       		.byte	0x1
+ 1936 051e 2501     		.2byte	0x125
+ 1937 0520 25000000 		.4byte	0x25
+ 1938 0524 02       		.uleb128 0x2
+ 1939 0525 91       		.byte	0x91
+ 1940 0526 6F       		.sleb128 -17
+ 1941 0527 19       		.uleb128 0x19
+ 1942 0528 62756600 		.ascii	"buf\000"
+ 1943 052c 01       		.byte	0x1
+ 1944 052d 2501     		.2byte	0x125
+ 1945 052f BC050000 		.4byte	0x5bc
+ 1946 0533 02       		.uleb128 0x2
+ 1947 0534 91       		.byte	0x91
+ 1948 0535 68       		.sleb128 -24
+ 1949 0536 0F       		.uleb128 0xf
+ 1950 0537 1A000000 		.4byte	.LVL51
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqwyLbK.s 			page 45
+
+
+ 1951 053b D2040000 		.4byte	0x4d2
+ 1952 053f 4F050000 		.4byte	0x54f
+ 1953 0543 10       		.uleb128 0x10
+ 1954 0544 01       		.uleb128 0x1
+ 1955 0545 50       		.byte	0x50
+ 1956 0546 02       		.uleb128 0x2
+ 1957 0547 08       		.byte	0x8
+ 1958 0548 37       		.byte	0x37
+ 1959 0549 10       		.uleb128 0x10
+ 1960 054a 01       		.uleb128 0x1
+ 1961 054b 51       		.byte	0x51
+ 1962 054c 01       		.uleb128 0x1
+ 1963 054d 30       		.byte	0x30
+ 1964 054e 00       		.byte	0
+ 1965 054f 0C       		.uleb128 0xc
+ 1966 0550 26000000 		.4byte	.LVL53
+ 1967 0554 FE030000 		.4byte	0x3fe
+ 1968 0558 0C       		.uleb128 0xc
+ 1969 0559 2A000000 		.4byte	.LVL54
+ 1970 055d 5B040000 		.4byte	0x45b
+ 1971 0561 0F       		.uleb128 0xf
+ 1972 0562 68000000 		.4byte	.LVL58
+ 1973 0566 13010000 		.4byte	0x113
+ 1974 056a 7A050000 		.4byte	0x57a
+ 1975 056e 10       		.uleb128 0x10
+ 1976 056f 01       		.uleb128 0x1
+ 1977 0570 50       		.byte	0x50
+ 1978 0571 02       		.uleb128 0x2
+ 1979 0572 7D       		.byte	0x7d
+ 1980 0573 00       		.sleb128 0
+ 1981 0574 10       		.uleb128 0x10
+ 1982 0575 01       		.uleb128 0x1
+ 1983 0576 51       		.byte	0x51
+ 1984 0577 01       		.uleb128 0x1
+ 1985 0578 36       		.byte	0x36
+ 1986 0579 00       		.byte	0
+ 1987 057a 0F       		.uleb128 0xf
+ 1988 057b 6E000000 		.4byte	.LVL59
+ 1989 057f E30A0000 		.4byte	0xae3
+ 1990 0583 8D050000 		.4byte	0x58d
+ 1991 0587 10       		.uleb128 0x10
+ 1992 0588 01       		.uleb128 0x1
+ 1993 0589 50       		.byte	0x50
+ 1994 058a 01       		.uleb128 0x1
+ 1995 058b 3A       		.byte	0x3a
+ 1996 058c 00       		.byte	0
+ 1997 058d 0F       		.uleb128 0xf
+ 1998 058e 7C000000 		.4byte	.LVL60
+ 1999 0592 84010000 		.4byte	0x184
+ 2000 0596 A6050000 		.4byte	0x5a6
+ 2001 059a 10       		.uleb128 0x10
+ 2002 059b 01       		.uleb128 0x1
+ 2003 059c 50       		.byte	0x50
+ 2004 059d 02       		.uleb128 0x2
+ 2005 059e 91       		.byte	0x91
+ 2006 059f 6F       		.sleb128 -17
+ 2007 05a0 10       		.uleb128 0x10
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqwyLbK.s 			page 46
+
+
+ 2008 05a1 01       		.uleb128 0x1
+ 2009 05a2 51       		.byte	0x51
+ 2010 05a3 01       		.uleb128 0x1
+ 2011 05a4 31       		.byte	0x31
+ 2012 05a5 00       		.byte	0
+ 2013 05a6 14       		.uleb128 0x14
+ 2014 05a7 88000000 		.4byte	.LVL62
+ 2015 05ab 84010000 		.4byte	0x184
+ 2016 05af 10       		.uleb128 0x10
+ 2017 05b0 01       		.uleb128 0x1
+ 2018 05b1 50       		.byte	0x50
+ 2019 05b2 02       		.uleb128 0x2
+ 2020 05b3 91       		.byte	0x91
+ 2021 05b4 6F       		.sleb128 -17
+ 2022 05b5 10       		.uleb128 0x10
+ 2023 05b6 01       		.uleb128 0x1
+ 2024 05b7 51       		.byte	0x51
+ 2025 05b8 01       		.uleb128 0x1
+ 2026 05b9 31       		.byte	0x31
+ 2027 05ba 00       		.byte	0
+ 2028 05bb 00       		.byte	0
+ 2029 05bc 15       		.uleb128 0x15
+ 2030 05bd 25000000 		.4byte	0x25
+ 2031 05c1 CC050000 		.4byte	0x5cc
+ 2032 05c5 16       		.uleb128 0x16
+ 2033 05c6 0A010000 		.4byte	0x10a
+ 2034 05ca 05       		.byte	0x5
+ 2035 05cb 00       		.byte	0
+ 2036 05cc 1C       		.uleb128 0x1c
+ 2037 05cd CF000000 		.4byte	.LASF38
+ 2038 05d1 01       		.byte	0x1
+ 2039 05d2 5701     		.2byte	0x157
+ 2040 05d4 82000000 		.4byte	0x82
+ 2041 05d8 00000000 		.4byte	.LFB71
+ 2042 05dc 10000000 		.4byte	.LFE71-.LFB71
+ 2043 05e0 01       		.uleb128 0x1
+ 2044 05e1 9C       		.byte	0x9c
+ 2045 05e2 F7050000 		.4byte	0x5f7
+ 2046 05e6 1A       		.uleb128 0x1a
+ 2047 05e7 64727600 		.ascii	"drv\000"
+ 2048 05eb 01       		.byte	0x1
+ 2049 05ec 5701     		.2byte	0x157
+ 2050 05ee 25000000 		.4byte	0x25
+ 2051 05f2 14020000 		.4byte	.LLST14
+ 2052 05f6 00       		.byte	0
+ 2053 05f7 1C       		.uleb128 0x1c
+ 2054 05f8 BA000000 		.4byte	.LASF39
+ 2055 05fc 01       		.byte	0x1
+ 2056 05fd 6201     		.2byte	0x162
+ 2057 05ff 82000000 		.4byte	0x82
+ 2058 0603 00000000 		.4byte	.LFB72
+ 2059 0607 24010000 		.4byte	.LFE72-.LFB72
+ 2060 060b 01       		.uleb128 0x1
+ 2061 060c 9C       		.byte	0x9c
+ 2062 060d C1070000 		.4byte	0x7c1
+ 2063 0611 1A       		.uleb128 0x1a
+ 2064 0612 64727600 		.ascii	"drv\000"
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqwyLbK.s 			page 47
+
+
+ 2065 0616 01       		.byte	0x1
+ 2066 0617 6201     		.2byte	0x162
+ 2067 0619 25000000 		.4byte	0x25
+ 2068 061d 4E020000 		.4byte	.LLST15
+ 2069 0621 1B       		.uleb128 0x1b
+ 2070 0622 6E00     		.ascii	"n\000"
+ 2071 0624 01       		.byte	0x1
+ 2072 0625 6401     		.2byte	0x164
+ 2073 0627 25000000 		.4byte	0x25
+ 2074 062b 88020000 		.4byte	.LLST16
+ 2075 062f 1B       		.uleb128 0x1b
+ 2076 0630 747900   		.ascii	"ty\000"
+ 2077 0633 01       		.byte	0x1
+ 2078 0634 6401     		.2byte	0x164
+ 2079 0636 25000000 		.4byte	0x25
+ 2080 063a E9020000 		.4byte	.LLST17
+ 2081 063e 1B       		.uleb128 0x1b
+ 2082 063f 636D6400 		.ascii	"cmd\000"
+ 2083 0643 01       		.byte	0x1
+ 2084 0644 6401     		.2byte	0x164
+ 2085 0646 25000000 		.4byte	0x25
+ 2086 064a 39030000 		.4byte	.LLST18
+ 2087 064e 19       		.uleb128 0x19
+ 2088 064f 62756600 		.ascii	"buf\000"
+ 2089 0653 01       		.byte	0x1
+ 2090 0654 6401     		.2byte	0x164
+ 2091 0656 C1070000 		.4byte	0x7c1
+ 2092 065a 02       		.uleb128 0x2
+ 2093 065b 91       		.byte	0x91
+ 2094 065c 6C       		.sleb128 -20
+ 2095 065d 1B       		.uleb128 0x1b
+ 2096 065e 746D7200 		.ascii	"tmr\000"
+ 2097 0662 01       		.byte	0x1
+ 2098 0663 6501     		.2byte	0x165
+ 2099 0665 57000000 		.4byte	0x57
+ 2100 0669 57030000 		.4byte	.LLST19
+ 2101 066d 1B       		.uleb128 0x1b
+ 2102 066e 7300     		.ascii	"s\000"
+ 2103 0670 01       		.byte	0x1
+ 2104 0671 6601     		.2byte	0x166
+ 2105 0673 82000000 		.4byte	0x82
+ 2106 0677 BA030000 		.4byte	.LLST20
+ 2107 067b 0F       		.uleb128 0xf
+ 2108 067c 12000000 		.4byte	.LVL72
+ 2109 0680 E30A0000 		.4byte	0xae3
+ 2110 0684 90060000 		.4byte	0x690
+ 2111 0688 10       		.uleb128 0x10
+ 2112 0689 01       		.uleb128 0x1
+ 2113 068a 50       		.byte	0x50
+ 2114 068b 03       		.uleb128 0x3
+ 2115 068c 0A       		.byte	0xa
+ 2116 068d 1027     		.2byte	0x2710
+ 2117 068f 00       		.byte	0
+ 2118 0690 0F       		.uleb128 0xf
+ 2119 0691 1E000000 		.4byte	.LVL74
+ 2120 0695 84010000 		.4byte	0x184
+ 2121 0699 A9060000 		.4byte	0x6a9
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqwyLbK.s 			page 48
+
+
+ 2122 069d 10       		.uleb128 0x10
+ 2123 069e 01       		.uleb128 0x1
+ 2124 069f 50       		.byte	0x50
+ 2125 06a0 02       		.uleb128 0x2
+ 2126 06a1 91       		.byte	0x91
+ 2127 06a2 6C       		.sleb128 -20
+ 2128 06a3 10       		.uleb128 0x10
+ 2129 06a4 01       		.uleb128 0x1
+ 2130 06a5 51       		.byte	0x51
+ 2131 06a6 01       		.uleb128 0x1
+ 2132 06a7 31       		.byte	0x31
+ 2133 06a8 00       		.byte	0
+ 2134 06a9 0F       		.uleb128 0xf
+ 2135 06aa 2E000000 		.4byte	.LVL78
+ 2136 06ae D2040000 		.4byte	0x4d2
+ 2137 06b2 C1060000 		.4byte	0x6c1
+ 2138 06b6 10       		.uleb128 0x10
+ 2139 06b7 01       		.uleb128 0x1
+ 2140 06b8 50       		.byte	0x50
+ 2141 06b9 01       		.uleb128 0x1
+ 2142 06ba 30       		.byte	0x30
+ 2143 06bb 10       		.uleb128 0x10
+ 2144 06bc 01       		.uleb128 0x1
+ 2145 06bd 51       		.byte	0x51
+ 2146 06be 01       		.uleb128 0x1
+ 2147 06bf 30       		.byte	0x30
+ 2148 06c0 00       		.byte	0
+ 2149 06c1 0F       		.uleb128 0xf
+ 2150 06c2 3C000000 		.4byte	.LVL79
+ 2151 06c6 D2040000 		.4byte	0x4d2
+ 2152 06ca DB060000 		.4byte	0x6db
+ 2153 06ce 10       		.uleb128 0x10
+ 2154 06cf 01       		.uleb128 0x1
+ 2155 06d0 50       		.byte	0x50
+ 2156 06d1 01       		.uleb128 0x1
+ 2157 06d2 38       		.byte	0x38
+ 2158 06d3 10       		.uleb128 0x10
+ 2159 06d4 01       		.uleb128 0x1
+ 2160 06d5 51       		.byte	0x51
+ 2161 06d6 03       		.uleb128 0x3
+ 2162 06d7 0A       		.byte	0xa
+ 2163 06d8 AA01     		.2byte	0x1aa
+ 2164 06da 00       		.byte	0
+ 2165 06db 0F       		.uleb128 0xf
+ 2166 06dc 4A000000 		.4byte	.LVL80
+ 2167 06e0 84010000 		.4byte	0x184
+ 2168 06e4 F4060000 		.4byte	0x6f4
+ 2169 06e8 10       		.uleb128 0x10
+ 2170 06e9 01       		.uleb128 0x1
+ 2171 06ea 50       		.byte	0x50
+ 2172 06eb 02       		.uleb128 0x2
+ 2173 06ec 91       		.byte	0x91
+ 2174 06ed 6C       		.sleb128 -20
+ 2175 06ee 10       		.uleb128 0x10
+ 2176 06ef 01       		.uleb128 0x1
+ 2177 06f0 51       		.byte	0x51
+ 2178 06f1 01       		.uleb128 0x1
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqwyLbK.s 			page 49
+
+
+ 2179 06f2 34       		.byte	0x34
+ 2180 06f3 00       		.byte	0
+ 2181 06f4 0F       		.uleb128 0xf
+ 2182 06f5 66000000 		.4byte	.LVL82
+ 2183 06f9 D2040000 		.4byte	0x4d2
+ 2184 06fd 0F070000 		.4byte	0x70f
+ 2185 0701 10       		.uleb128 0x10
+ 2186 0702 01       		.uleb128 0x1
+ 2187 0703 50       		.byte	0x50
+ 2188 0704 02       		.uleb128 0x2
+ 2189 0705 09       		.byte	0x9
+ 2190 0706 A9       		.byte	0xa9
+ 2191 0707 10       		.uleb128 0x10
+ 2192 0708 01       		.uleb128 0x1
+ 2193 0709 51       		.byte	0x51
+ 2194 070a 03       		.uleb128 0x3
+ 2195 070b 40       		.byte	0x40
+ 2196 070c 4A       		.byte	0x4a
+ 2197 070d 24       		.byte	0x24
+ 2198 070e 00       		.byte	0
+ 2199 070f 0F       		.uleb128 0xf
+ 2200 0710 70000000 		.4byte	.LVL83
+ 2201 0714 E30A0000 		.4byte	0xae3
+ 2202 0718 24070000 		.4byte	0x724
+ 2203 071c 10       		.uleb128 0x10
+ 2204 071d 01       		.uleb128 0x1
+ 2205 071e 50       		.byte	0x50
+ 2206 071f 03       		.uleb128 0x3
+ 2207 0720 0A       		.byte	0xa
+ 2208 0721 E803     		.2byte	0x3e8
+ 2209 0723 00       		.byte	0
+ 2210 0724 0F       		.uleb128 0xf
+ 2211 0725 86000000 		.4byte	.LVL87
+ 2212 0729 D2040000 		.4byte	0x4d2
+ 2213 072d 3D070000 		.4byte	0x73d
+ 2214 0731 10       		.uleb128 0x10
+ 2215 0732 01       		.uleb128 0x1
+ 2216 0733 50       		.byte	0x50
+ 2217 0734 02       		.uleb128 0x2
+ 2218 0735 08       		.byte	0x8
+ 2219 0736 3A       		.byte	0x3a
+ 2220 0737 10       		.uleb128 0x10
+ 2221 0738 01       		.uleb128 0x1
+ 2222 0739 51       		.byte	0x51
+ 2223 073a 01       		.uleb128 0x1
+ 2224 073b 30       		.byte	0x30
+ 2225 073c 00       		.byte	0
+ 2226 073d 0F       		.uleb128 0xf
+ 2227 073e 92000000 		.4byte	.LVL88
+ 2228 0742 84010000 		.4byte	0x184
+ 2229 0746 56070000 		.4byte	0x756
+ 2230 074a 10       		.uleb128 0x10
+ 2231 074b 01       		.uleb128 0x1
+ 2232 074c 50       		.byte	0x50
+ 2233 074d 02       		.uleb128 0x2
+ 2234 074e 91       		.byte	0x91
+ 2235 074f 6C       		.sleb128 -20
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqwyLbK.s 			page 50
+
+
+ 2236 0750 10       		.uleb128 0x10
+ 2237 0751 01       		.uleb128 0x1
+ 2238 0752 51       		.byte	0x51
+ 2239 0753 01       		.uleb128 0x1
+ 2240 0754 34       		.byte	0x34
+ 2241 0755 00       		.byte	0
+ 2242 0756 0F       		.uleb128 0xf
+ 2243 0757 A8000000 		.4byte	.LVL91
+ 2244 075b D2040000 		.4byte	0x4d2
+ 2245 075f 6F070000 		.4byte	0x76f
+ 2246 0763 10       		.uleb128 0x10
+ 2247 0764 01       		.uleb128 0x1
+ 2248 0765 50       		.byte	0x50
+ 2249 0766 02       		.uleb128 0x2
+ 2250 0767 09       		.byte	0x9
+ 2251 0768 A9       		.byte	0xa9
+ 2252 0769 10       		.uleb128 0x10
+ 2253 076a 01       		.uleb128 0x1
+ 2254 076b 51       		.byte	0x51
+ 2255 076c 01       		.uleb128 0x1
+ 2256 076d 30       		.byte	0x30
+ 2257 076e 00       		.byte	0
+ 2258 076f 0F       		.uleb128 0xf
+ 2259 0770 C4000000 		.4byte	.LVL96
+ 2260 0774 D2040000 		.4byte	0x4d2
+ 2261 0778 88070000 		.4byte	0x788
+ 2262 077c 10       		.uleb128 0x10
+ 2263 077d 01       		.uleb128 0x1
+ 2264 077e 50       		.byte	0x50
+ 2265 077f 02       		.uleb128 0x2
+ 2266 0780 76       		.byte	0x76
+ 2267 0781 00       		.sleb128 0
+ 2268 0782 10       		.uleb128 0x10
+ 2269 0783 01       		.uleb128 0x1
+ 2270 0784 51       		.byte	0x51
+ 2271 0785 01       		.uleb128 0x1
+ 2272 0786 30       		.byte	0x30
+ 2273 0787 00       		.byte	0
+ 2274 0788 0F       		.uleb128 0xf
+ 2275 0789 CE000000 		.4byte	.LVL97
+ 2276 078d E30A0000 		.4byte	0xae3
+ 2277 0791 9D070000 		.4byte	0x79d
+ 2278 0795 10       		.uleb128 0x10
+ 2279 0796 01       		.uleb128 0x1
+ 2280 0797 50       		.byte	0x50
+ 2281 0798 03       		.uleb128 0x3
+ 2282 0799 0A       		.byte	0xa
+ 2283 079a E803     		.2byte	0x3e8
+ 2284 079c 00       		.byte	0
+ 2285 079d 0F       		.uleb128 0xf
+ 2286 079e E0000000 		.4byte	.LVL99
+ 2287 07a2 D2040000 		.4byte	0x4d2
+ 2288 07a6 B7070000 		.4byte	0x7b7
+ 2289 07aa 10       		.uleb128 0x10
+ 2290 07ab 01       		.uleb128 0x1
+ 2291 07ac 50       		.byte	0x50
+ 2292 07ad 01       		.uleb128 0x1
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqwyLbK.s 			page 51
+
+
+ 2293 07ae 40       		.byte	0x40
+ 2294 07af 10       		.uleb128 0x10
+ 2295 07b0 01       		.uleb128 0x1
+ 2296 07b1 51       		.byte	0x51
+ 2297 07b2 03       		.uleb128 0x3
+ 2298 07b3 0A       		.byte	0xa
+ 2299 07b4 0002     		.2byte	0x200
+ 2300 07b6 00       		.byte	0
+ 2301 07b7 0C       		.uleb128 0xc
+ 2302 07b8 10010000 		.4byte	.LVL116
+ 2303 07bc FE030000 		.4byte	0x3fe
+ 2304 07c0 00       		.byte	0
+ 2305 07c1 15       		.uleb128 0x15
+ 2306 07c2 25000000 		.4byte	0x25
+ 2307 07c6 D1070000 		.4byte	0x7d1
+ 2308 07ca 16       		.uleb128 0x16
+ 2309 07cb 0A010000 		.4byte	0x10a
+ 2310 07cf 03       		.byte	0x3
+ 2311 07d0 00       		.byte	0
+ 2312 07d1 1C       		.uleb128 0x1c
+ 2313 07d2 DB000000 		.4byte	.LASF40
+ 2314 07d6 01       		.byte	0x1
+ 2315 07d7 9701     		.2byte	0x197
+ 2316 07d9 B8000000 		.4byte	0xb8
+ 2317 07dd 00000000 		.4byte	.LFB73
+ 2318 07e1 68000000 		.4byte	.LFE73-.LFB73
+ 2319 07e5 01       		.uleb128 0x1
+ 2320 07e6 9C       		.byte	0x9c
+ 2321 07e7 9B080000 		.4byte	0x89b
+ 2322 07eb 1A       		.uleb128 0x1a
+ 2323 07ec 64727600 		.ascii	"drv\000"
+ 2324 07f0 01       		.byte	0x1
+ 2325 07f1 9701     		.2byte	0x197
+ 2326 07f3 25000000 		.4byte	0x25
+ 2327 07f7 E3030000 		.4byte	.LLST21
+ 2328 07fb 18       		.uleb128 0x18
+ 2329 07fc 55000000 		.4byte	.LASF27
+ 2330 0800 01       		.byte	0x1
+ 2331 0801 9701     		.2byte	0x197
+ 2332 0803 02020000 		.4byte	0x202
+ 2333 0807 04040000 		.4byte	.LLST22
+ 2334 080b 18       		.uleb128 0x18
+ 2335 080c 8C000000 		.4byte	.LASF41
+ 2336 0810 01       		.byte	0x1
+ 2337 0811 9701     		.2byte	0x197
+ 2338 0813 70000000 		.4byte	0x70
+ 2339 0817 30040000 		.4byte	.LLST23
+ 2340 081b 18       		.uleb128 0x18
+ 2341 081c D3020000 		.4byte	.LASF42
+ 2342 0820 01       		.byte	0x1
+ 2343 0821 9701     		.2byte	0x197
+ 2344 0823 57000000 		.4byte	0x57
+ 2345 0827 5C040000 		.4byte	.LLST24
+ 2346 082b 1B       		.uleb128 0x1b
+ 2347 082c 636D6400 		.ascii	"cmd\000"
+ 2348 0830 01       		.byte	0x1
+ 2349 0831 9901     		.2byte	0x199
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqwyLbK.s 			page 52
+
+
+ 2350 0833 25000000 		.4byte	0x25
+ 2351 0837 A0040000 		.4byte	.LLST25
+ 2352 083b 0C       		.uleb128 0xc
+ 2353 083c 0C000000 		.4byte	.LVL122
+ 2354 0840 CC050000 		.4byte	0x5cc
+ 2355 0844 0F       		.uleb128 0xf
+ 2356 0845 30000000 		.4byte	.LVL125
+ 2357 0849 D2040000 		.4byte	0x4d2
+ 2358 084d 5E080000 		.4byte	0x85e
+ 2359 0851 10       		.uleb128 0x10
+ 2360 0852 01       		.uleb128 0x1
+ 2361 0853 50       		.byte	0x50
+ 2362 0854 02       		.uleb128 0x2
+ 2363 0855 77       		.byte	0x77
+ 2364 0856 00       		.sleb128 0
+ 2365 0857 10       		.uleb128 0x10
+ 2366 0858 01       		.uleb128 0x1
+ 2367 0859 51       		.byte	0x51
+ 2368 085a 02       		.uleb128 0x2
+ 2369 085b 76       		.byte	0x76
+ 2370 085c 00       		.sleb128 0
+ 2371 085d 00       		.byte	0
+ 2372 085e 0F       		.uleb128 0xf
+ 2373 085f 3C000000 		.4byte	.LVL126
+ 2374 0863 66020000 		.4byte	0x266
+ 2375 0867 79080000 		.4byte	0x879
+ 2376 086b 10       		.uleb128 0x10
+ 2377 086c 01       		.uleb128 0x1
+ 2378 086d 50       		.byte	0x50
+ 2379 086e 02       		.uleb128 0x2
+ 2380 086f 75       		.byte	0x75
+ 2381 0870 00       		.sleb128 0
+ 2382 0871 10       		.uleb128 0x10
+ 2383 0872 01       		.uleb128 0x1
+ 2384 0873 51       		.byte	0x51
+ 2385 0874 03       		.uleb128 0x3
+ 2386 0875 0A       		.byte	0xa
+ 2387 0876 0002     		.2byte	0x200
+ 2388 0878 00       		.byte	0
+ 2389 0879 0F       		.uleb128 0xf
+ 2390 087a 52000000 		.4byte	.LVL129
+ 2391 087e D2040000 		.4byte	0x4d2
+ 2392 0882 91080000 		.4byte	0x891
+ 2393 0886 10       		.uleb128 0x10
+ 2394 0887 01       		.uleb128 0x1
+ 2395 0888 50       		.byte	0x50
+ 2396 0889 01       		.uleb128 0x1
+ 2397 088a 3C       		.byte	0x3c
+ 2398 088b 10       		.uleb128 0x10
+ 2399 088c 01       		.uleb128 0x1
+ 2400 088d 51       		.byte	0x51
+ 2401 088e 01       		.uleb128 0x1
+ 2402 088f 30       		.byte	0x30
+ 2403 0890 00       		.byte	0
+ 2404 0891 0C       		.uleb128 0xc
+ 2405 0892 56000000 		.4byte	.LVL130
+ 2406 0896 FE030000 		.4byte	0x3fe
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqwyLbK.s 			page 53
+
+
+ 2407 089a 00       		.byte	0
+ 2408 089b 1C       		.uleb128 0x1c
+ 2409 089c 37020000 		.4byte	.LASF43
+ 2410 08a0 01       		.byte	0x1
+ 2411 08a1 AF01     		.2byte	0x1af
+ 2412 08a3 B8000000 		.4byte	0xb8
+ 2413 08a7 00000000 		.4byte	.LFB74
+ 2414 08ab 88000000 		.4byte	.LFE74-.LFB74
+ 2415 08af 01       		.uleb128 0x1
+ 2416 08b0 9C       		.byte	0x9c
+ 2417 08b1 A1090000 		.4byte	0x9a1
+ 2418 08b5 1A       		.uleb128 0x1a
+ 2419 08b6 64727600 		.ascii	"drv\000"
+ 2420 08ba 01       		.byte	0x1
+ 2421 08bb B001     		.2byte	0x1b0
+ 2422 08bd 25000000 		.4byte	0x25
+ 2423 08c1 B3040000 		.4byte	.LLST26
+ 2424 08c5 18       		.uleb128 0x18
+ 2425 08c6 55000000 		.4byte	.LASF27
+ 2426 08ca 01       		.byte	0x1
+ 2427 08cb B101     		.2byte	0x1b1
+ 2428 08cd 79010000 		.4byte	0x179
+ 2429 08d1 D4040000 		.4byte	.LLST27
+ 2430 08d5 18       		.uleb128 0x18
+ 2431 08d6 8C000000 		.4byte	.LASF41
+ 2432 08da 01       		.byte	0x1
+ 2433 08db B201     		.2byte	0x1b2
+ 2434 08dd 70000000 		.4byte	0x70
+ 2435 08e1 00050000 		.4byte	.LLST28
+ 2436 08e5 18       		.uleb128 0x18
+ 2437 08e6 D3020000 		.4byte	.LASF42
+ 2438 08ea 01       		.byte	0x1
+ 2439 08eb B301     		.2byte	0x1b3
+ 2440 08ed 57000000 		.4byte	0x57
+ 2441 08f1 2C050000 		.4byte	.LLST29
+ 2442 08f5 0C       		.uleb128 0xc
+ 2443 08f6 0C000000 		.4byte	.LVL134
+ 2444 08fa CC050000 		.4byte	0x5cc
+ 2445 08fe 0F       		.uleb128 0xf
+ 2446 08ff 2A000000 		.4byte	.LVL136
+ 2447 0903 D2040000 		.4byte	0x4d2
+ 2448 0907 17090000 		.4byte	0x917
+ 2449 090b 10       		.uleb128 0x10
+ 2450 090c 01       		.uleb128 0x1
+ 2451 090d 50       		.byte	0x50
+ 2452 090e 01       		.uleb128 0x1
+ 2453 090f 48       		.byte	0x48
+ 2454 0910 10       		.uleb128 0x10
+ 2455 0911 01       		.uleb128 0x1
+ 2456 0912 51       		.byte	0x51
+ 2457 0913 02       		.uleb128 0x2
+ 2458 0914 76       		.byte	0x76
+ 2459 0915 00       		.sleb128 0
+ 2460 0916 00       		.byte	0
+ 2461 0917 0F       		.uleb128 0xf
+ 2462 0918 34000000 		.4byte	.LVL137
+ 2463 091c 25030000 		.4byte	0x325
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqwyLbK.s 			page 54
+
+
+ 2464 0920 31090000 		.4byte	0x931
+ 2465 0924 10       		.uleb128 0x10
+ 2466 0925 01       		.uleb128 0x1
+ 2467 0926 50       		.byte	0x50
+ 2468 0927 02       		.uleb128 0x2
+ 2469 0928 75       		.byte	0x75
+ 2470 0929 00       		.sleb128 0
+ 2471 092a 10       		.uleb128 0x10
+ 2472 092b 01       		.uleb128 0x1
+ 2473 092c 51       		.byte	0x51
+ 2474 092d 02       		.uleb128 0x2
+ 2475 092e 09       		.byte	0x9
+ 2476 092f FE       		.byte	0xfe
+ 2477 0930 00       		.byte	0
+ 2478 0931 0F       		.uleb128 0xf
+ 2479 0932 46000000 		.4byte	.LVL138
+ 2480 0936 D2040000 		.4byte	0x4d2
+ 2481 093a 4B090000 		.4byte	0x94b
+ 2482 093e 10       		.uleb128 0x10
+ 2483 093f 01       		.uleb128 0x1
+ 2484 0940 50       		.byte	0x50
+ 2485 0941 02       		.uleb128 0x2
+ 2486 0942 09       		.byte	0x9
+ 2487 0943 97       		.byte	0x97
+ 2488 0944 10       		.uleb128 0x10
+ 2489 0945 01       		.uleb128 0x1
+ 2490 0946 51       		.byte	0x51
+ 2491 0947 02       		.uleb128 0x2
+ 2492 0948 74       		.byte	0x74
+ 2493 0949 00       		.sleb128 0
+ 2494 094a 00       		.byte	0
+ 2495 094b 0F       		.uleb128 0xf
+ 2496 094c 4E000000 		.4byte	.LVL139
+ 2497 0950 D2040000 		.4byte	0x4d2
+ 2498 0954 64090000 		.4byte	0x964
+ 2499 0958 10       		.uleb128 0x10
+ 2500 0959 01       		.uleb128 0x1
+ 2501 095a 50       		.byte	0x50
+ 2502 095b 01       		.uleb128 0x1
+ 2503 095c 49       		.byte	0x49
+ 2504 095d 10       		.uleb128 0x10
+ 2505 095e 01       		.uleb128 0x1
+ 2506 095f 51       		.byte	0x51
+ 2507 0960 02       		.uleb128 0x2
+ 2508 0961 76       		.byte	0x76
+ 2509 0962 00       		.sleb128 0
+ 2510 0963 00       		.byte	0
+ 2511 0964 0F       		.uleb128 0xf
+ 2512 0965 58000000 		.4byte	.LVL140
+ 2513 0969 25030000 		.4byte	0x325
+ 2514 096d 7E090000 		.4byte	0x97e
+ 2515 0971 10       		.uleb128 0x10
+ 2516 0972 01       		.uleb128 0x1
+ 2517 0973 50       		.byte	0x50
+ 2518 0974 02       		.uleb128 0x2
+ 2519 0975 75       		.byte	0x75
+ 2520 0976 00       		.sleb128 0
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqwyLbK.s 			page 55
+
+
+ 2521 0977 10       		.uleb128 0x10
+ 2522 0978 01       		.uleb128 0x1
+ 2523 0979 51       		.byte	0x51
+ 2524 097a 02       		.uleb128 0x2
+ 2525 097b 09       		.byte	0x9
+ 2526 097c FC       		.byte	0xfc
+ 2527 097d 00       		.byte	0
+ 2528 097e 0F       		.uleb128 0xf
+ 2529 097f 6A000000 		.4byte	.LVL143
+ 2530 0983 25030000 		.4byte	0x325
+ 2531 0987 97090000 		.4byte	0x997
+ 2532 098b 10       		.uleb128 0x10
+ 2533 098c 01       		.uleb128 0x1
+ 2534 098d 50       		.byte	0x50
+ 2535 098e 01       		.uleb128 0x1
+ 2536 098f 30       		.byte	0x30
+ 2537 0990 10       		.uleb128 0x10
+ 2538 0991 01       		.uleb128 0x1
+ 2539 0992 51       		.byte	0x51
+ 2540 0993 02       		.uleb128 0x2
+ 2541 0994 09       		.byte	0x9
+ 2542 0995 FD       		.byte	0xfd
+ 2543 0996 00       		.byte	0
+ 2544 0997 0C       		.uleb128 0xc
+ 2545 0998 78000000 		.4byte	.LVL147
+ 2546 099c FE030000 		.4byte	0x3fe
+ 2547 09a0 00       		.byte	0
+ 2548 09a1 1C       		.uleb128 0x1c
+ 2549 09a2 69020000 		.4byte	.LASF44
+ 2550 09a6 01       		.byte	0x1
+ 2551 09a7 D301     		.2byte	0x1d3
+ 2552 09a9 B8000000 		.4byte	0xb8
+ 2553 09ad 00000000 		.4byte	.LFB75
+ 2554 09b1 DA000000 		.4byte	.LFE75-.LFB75
+ 2555 09b5 01       		.uleb128 0x1
+ 2556 09b6 9C       		.byte	0x9c
+ 2557 09b7 740A0000 		.4byte	0xa74
+ 2558 09bb 1A       		.uleb128 0x1a
+ 2559 09bc 64727600 		.ascii	"drv\000"
+ 2560 09c0 01       		.byte	0x1
+ 2561 09c1 D401     		.2byte	0x1d4
+ 2562 09c3 25000000 		.4byte	0x25
+ 2563 09c7 89050000 		.4byte	.LLST30
+ 2564 09cb 18       		.uleb128 0x18
+ 2565 09cc AD020000 		.4byte	.LASF45
+ 2566 09d0 01       		.byte	0x1
+ 2567 09d1 D501     		.2byte	0x1d5
+ 2568 09d3 25000000 		.4byte	0x25
+ 2569 09d7 AA050000 		.4byte	.LLST31
+ 2570 09db 18       		.uleb128 0x18
+ 2571 09dc 55000000 		.4byte	.LASF27
+ 2572 09e0 01       		.byte	0x1
+ 2573 09e1 D601     		.2byte	0x1d6
+ 2574 09e3 11010000 		.4byte	0x111
+ 2575 09e7 CB050000 		.4byte	.LLST32
+ 2576 09eb 1B       		.uleb128 0x1b
+ 2577 09ec 72657300 		.ascii	"res\000"
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqwyLbK.s 			page 56
+
+
+ 2578 09f0 01       		.byte	0x1
+ 2579 09f1 D901     		.2byte	0x1d9
+ 2580 09f3 B8000000 		.4byte	0xb8
+ 2581 09f7 E9050000 		.4byte	.LLST33
+ 2582 09fb 1B       		.uleb128 0x1b
+ 2583 09fc 6E00     		.ascii	"n\000"
+ 2584 09fe 01       		.byte	0x1
+ 2585 09ff DA01     		.2byte	0x1da
+ 2586 0a01 25000000 		.4byte	0x25
+ 2587 0a05 20060000 		.4byte	.LLST34
+ 2588 0a09 19       		.uleb128 0x19
+ 2589 0a0a 63736400 		.ascii	"csd\000"
+ 2590 0a0e 01       		.byte	0x1
+ 2591 0a0f DA01     		.2byte	0x1da
+ 2592 0a11 740A0000 		.4byte	0xa74
+ 2593 0a15 02       		.uleb128 0x2
+ 2594 0a16 91       		.byte	0x91
+ 2595 0a17 60       		.sleb128 -32
+ 2596 0a18 1B       		.uleb128 0x1b
+ 2597 0a19 637300   		.ascii	"cs\000"
+ 2598 0a1c 01       		.byte	0x1
+ 2599 0a1d DB01     		.2byte	0x1db
+ 2600 0a1f 70000000 		.4byte	0x70
+ 2601 0a23 6C060000 		.4byte	.LLST35
+ 2602 0a27 0C       		.uleb128 0xc
+ 2603 0a28 0C000000 		.4byte	.LVL151
+ 2604 0a2c CC050000 		.4byte	0x5cc
+ 2605 0a30 0C       		.uleb128 0xc
+ 2606 0a31 22000000 		.4byte	.LVL153
+ 2607 0a35 5B040000 		.4byte	0x45b
+ 2608 0a39 0F       		.uleb128 0xf
+ 2609 0a3a 32000000 		.4byte	.LVL154
+ 2610 0a3e D2040000 		.4byte	0x4d2
+ 2611 0a42 510A0000 		.4byte	0xa51
+ 2612 0a46 10       		.uleb128 0x10
+ 2613 0a47 01       		.uleb128 0x1
+ 2614 0a48 50       		.byte	0x50
+ 2615 0a49 01       		.uleb128 0x1
+ 2616 0a4a 39       		.byte	0x39
+ 2617 0a4b 10       		.uleb128 0x10
+ 2618 0a4c 01       		.uleb128 0x1
+ 2619 0a4d 51       		.byte	0x51
+ 2620 0a4e 01       		.uleb128 0x1
+ 2621 0a4f 30       		.byte	0x30
+ 2622 0a50 00       		.byte	0
+ 2623 0a51 0F       		.uleb128 0xf
+ 2624 0a52 3E000000 		.4byte	.LVL155
+ 2625 0a56 66020000 		.4byte	0x266
+ 2626 0a5a 6A0A0000 		.4byte	0xa6a
+ 2627 0a5e 10       		.uleb128 0x10
+ 2628 0a5f 01       		.uleb128 0x1
+ 2629 0a60 50       		.byte	0x50
+ 2630 0a61 02       		.uleb128 0x2
+ 2631 0a62 7D       		.byte	0x7d
+ 2632 0a63 00       		.sleb128 0
+ 2633 0a64 10       		.uleb128 0x10
+ 2634 0a65 01       		.uleb128 0x1
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqwyLbK.s 			page 57
+
+
+ 2635 0a66 51       		.byte	0x51
+ 2636 0a67 01       		.uleb128 0x1
+ 2637 0a68 40       		.byte	0x40
+ 2638 0a69 00       		.byte	0
+ 2639 0a6a 0C       		.uleb128 0xc
+ 2640 0a6b D0000000 		.4byte	.LVL168
+ 2641 0a6f FE030000 		.4byte	0x3fe
+ 2642 0a73 00       		.byte	0
+ 2643 0a74 15       		.uleb128 0x15
+ 2644 0a75 25000000 		.4byte	0x25
+ 2645 0a79 840A0000 		.4byte	0xa84
+ 2646 0a7d 16       		.uleb128 0x16
+ 2647 0a7e 0A010000 		.4byte	0x10a
+ 2648 0a82 0F       		.byte	0xf
+ 2649 0a83 00       		.byte	0
+ 2650 0a84 1D       		.uleb128 0x1d
+ 2651 0a85 3A000000 		.4byte	.LASF46
+ 2652 0a89 01       		.byte	0x1
+ 2653 0a8a 6D       		.byte	0x6d
+ 2654 0a8b 82000000 		.4byte	0x82
+ 2655 0a8f 05       		.uleb128 0x5
+ 2656 0a90 03       		.byte	0x3
+ 2657 0a91 00000000 		.4byte	Stat
+ 2658 0a95 1D       		.uleb128 0x1d
+ 2659 0a96 5F000000 		.4byte	.LASF47
+ 2660 0a9a 01       		.byte	0x1
+ 2661 0a9b 6F       		.byte	0x6f
+ 2662 0a9c 25000000 		.4byte	0x25
+ 2663 0aa0 05       		.uleb128 0x5
+ 2664 0aa1 03       		.byte	0x3
+ 2665 0aa2 00000000 		.4byte	CardType
+ 2666 0aa6 1E       		.uleb128 0x1e
+ 2667 0aa7 15030000 		.4byte	.LASF58
+ 2668 0aab 09       		.byte	0x9
+ 2669 0aac 1207     		.2byte	0x712
+ 2670 0aae B20A0000 		.4byte	0xab2
+ 2671 0ab2 1F       		.uleb128 0x1f
+ 2672 0ab3 E3000000 		.4byte	0xe3
+ 2673 0ab7 20       		.uleb128 0x20
+ 2674 0ab8 71000000 		.4byte	.LASF48
+ 2675 0abc 71000000 		.4byte	.LASF48
+ 2676 0ac0 06       		.byte	0x6
+ 2677 0ac1 65       		.byte	0x65
+ 2678 0ac2 20       		.uleb128 0x20
+ 2679 0ac3 B2020000 		.4byte	.LASF49
+ 2680 0ac7 B2020000 		.4byte	.LASF49
+ 2681 0acb 06       		.byte	0x6
+ 2682 0acc 64       		.byte	0x64
+ 2683 0acd 20       		.uleb128 0x20
+ 2684 0ace 2A000000 		.4byte	.LASF50
+ 2685 0ad2 2A000000 		.4byte	.LASF50
+ 2686 0ad6 06       		.byte	0x6
+ 2687 0ad7 5E       		.byte	0x5e
+ 2688 0ad8 20       		.uleb128 0x20
+ 2689 0ad9 42020000 		.4byte	.LASF51
+ 2690 0add 42020000 		.4byte	.LASF51
+ 2691 0ae1 06       		.byte	0x6
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqwyLbK.s 			page 58
+
+
+ 2692 0ae2 63       		.byte	0x63
+ 2693 0ae3 20       		.uleb128 0x20
+ 2694 0ae4 0A010000 		.4byte	.LASF52
+ 2695 0ae8 0A010000 		.4byte	.LASF52
+ 2696 0aec 07       		.byte	0x7
+ 2697 0aed 77       		.byte	0x77
+ 2698 0aee 20       		.uleb128 0x20
+ 2699 0aef 3F000000 		.4byte	.LASF53
+ 2700 0af3 3F000000 		.4byte	.LASF53
+ 2701 0af7 06       		.byte	0x6
+ 2702 0af8 60       		.byte	0x60
+ 2703 0af9 20       		.uleb128 0x20
+ 2704 0afa D9020000 		.4byte	.LASF54
+ 2705 0afe D9020000 		.4byte	.LASF54
+ 2706 0b02 08       		.byte	0x8
+ 2707 0b03 26       		.byte	0x26
+ 2708 0b04 00       		.byte	0
+ 2709              		.section	.debug_abbrev,"",%progbits
+ 2710              	.Ldebug_abbrev0:
+ 2711 0000 01       		.uleb128 0x1
+ 2712 0001 11       		.uleb128 0x11
+ 2713 0002 01       		.byte	0x1
+ 2714 0003 25       		.uleb128 0x25
+ 2715 0004 0E       		.uleb128 0xe
+ 2716 0005 13       		.uleb128 0x13
+ 2717 0006 0B       		.uleb128 0xb
+ 2718 0007 03       		.uleb128 0x3
+ 2719 0008 0E       		.uleb128 0xe
+ 2720 0009 1B       		.uleb128 0x1b
+ 2721 000a 0E       		.uleb128 0xe
+ 2722 000b 55       		.uleb128 0x55
+ 2723 000c 17       		.uleb128 0x17
+ 2724 000d 11       		.uleb128 0x11
+ 2725 000e 01       		.uleb128 0x1
+ 2726 000f 10       		.uleb128 0x10
+ 2727 0010 17       		.uleb128 0x17
+ 2728 0011 00       		.byte	0
+ 2729 0012 00       		.byte	0
+ 2730 0013 02       		.uleb128 0x2
+ 2731 0014 16       		.uleb128 0x16
+ 2732 0015 00       		.byte	0
+ 2733 0016 03       		.uleb128 0x3
+ 2734 0017 0E       		.uleb128 0xe
+ 2735 0018 3A       		.uleb128 0x3a
+ 2736 0019 0B       		.uleb128 0xb
+ 2737 001a 3B       		.uleb128 0x3b
+ 2738 001b 0B       		.uleb128 0xb
+ 2739 001c 49       		.uleb128 0x49
+ 2740 001d 13       		.uleb128 0x13
+ 2741 001e 00       		.byte	0
+ 2742 001f 00       		.byte	0
+ 2743 0020 03       		.uleb128 0x3
+ 2744 0021 24       		.uleb128 0x24
+ 2745 0022 00       		.byte	0
+ 2746 0023 0B       		.uleb128 0xb
+ 2747 0024 0B       		.uleb128 0xb
+ 2748 0025 3E       		.uleb128 0x3e
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqwyLbK.s 			page 59
+
+
+ 2749 0026 0B       		.uleb128 0xb
+ 2750 0027 03       		.uleb128 0x3
+ 2751 0028 0E       		.uleb128 0xe
+ 2752 0029 00       		.byte	0
+ 2753 002a 00       		.byte	0
+ 2754 002b 04       		.uleb128 0x4
+ 2755 002c 24       		.uleb128 0x24
+ 2756 002d 00       		.byte	0
+ 2757 002e 0B       		.uleb128 0xb
+ 2758 002f 0B       		.uleb128 0xb
+ 2759 0030 3E       		.uleb128 0x3e
+ 2760 0031 0B       		.uleb128 0xb
+ 2761 0032 03       		.uleb128 0x3
+ 2762 0033 08       		.uleb128 0x8
+ 2763 0034 00       		.byte	0
+ 2764 0035 00       		.byte	0
+ 2765 0036 05       		.uleb128 0x5
+ 2766 0037 04       		.uleb128 0x4
+ 2767 0038 01       		.byte	0x1
+ 2768 0039 0B       		.uleb128 0xb
+ 2769 003a 0B       		.uleb128 0xb
+ 2770 003b 49       		.uleb128 0x49
+ 2771 003c 13       		.uleb128 0x13
+ 2772 003d 3A       		.uleb128 0x3a
+ 2773 003e 0B       		.uleb128 0xb
+ 2774 003f 3B       		.uleb128 0x3b
+ 2775 0040 0B       		.uleb128 0xb
+ 2776 0041 01       		.uleb128 0x1
+ 2777 0042 13       		.uleb128 0x13
+ 2778 0043 00       		.byte	0
+ 2779 0044 00       		.byte	0
+ 2780 0045 06       		.uleb128 0x6
+ 2781 0046 28       		.uleb128 0x28
+ 2782 0047 00       		.byte	0
+ 2783 0048 03       		.uleb128 0x3
+ 2784 0049 0E       		.uleb128 0xe
+ 2785 004a 1C       		.uleb128 0x1c
+ 2786 004b 0B       		.uleb128 0xb
+ 2787 004c 00       		.byte	0
+ 2788 004d 00       		.byte	0
+ 2789 004e 07       		.uleb128 0x7
+ 2790 004f 0F       		.uleb128 0xf
+ 2791 0050 00       		.byte	0
+ 2792 0051 0B       		.uleb128 0xb
+ 2793 0052 0B       		.uleb128 0xb
+ 2794 0053 00       		.byte	0
+ 2795 0054 00       		.byte	0
+ 2796 0055 08       		.uleb128 0x8
+ 2797 0056 2E       		.uleb128 0x2e
+ 2798 0057 01       		.byte	0x1
+ 2799 0058 03       		.uleb128 0x3
+ 2800 0059 0E       		.uleb128 0xe
+ 2801 005a 3A       		.uleb128 0x3a
+ 2802 005b 0B       		.uleb128 0xb
+ 2803 005c 3B       		.uleb128 0x3b
+ 2804 005d 0B       		.uleb128 0xb
+ 2805 005e 27       		.uleb128 0x27
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqwyLbK.s 			page 60
+
+
+ 2806 005f 19       		.uleb128 0x19
+ 2807 0060 11       		.uleb128 0x11
+ 2808 0061 01       		.uleb128 0x1
+ 2809 0062 12       		.uleb128 0x12
+ 2810 0063 06       		.uleb128 0x6
+ 2811 0064 40       		.uleb128 0x40
+ 2812 0065 18       		.uleb128 0x18
+ 2813 0066 9742     		.uleb128 0x2117
+ 2814 0068 19       		.uleb128 0x19
+ 2815 0069 01       		.uleb128 0x1
+ 2816 006a 13       		.uleb128 0x13
+ 2817 006b 00       		.byte	0
+ 2818 006c 00       		.byte	0
+ 2819 006d 09       		.uleb128 0x9
+ 2820 006e 05       		.uleb128 0x5
+ 2821 006f 00       		.byte	0
+ 2822 0070 03       		.uleb128 0x3
+ 2823 0071 0E       		.uleb128 0xe
+ 2824 0072 3A       		.uleb128 0x3a
+ 2825 0073 0B       		.uleb128 0xb
+ 2826 0074 3B       		.uleb128 0x3b
+ 2827 0075 0B       		.uleb128 0xb
+ 2828 0076 49       		.uleb128 0x49
+ 2829 0077 13       		.uleb128 0x13
+ 2830 0078 02       		.uleb128 0x2
+ 2831 0079 17       		.uleb128 0x17
+ 2832 007a 00       		.byte	0
+ 2833 007b 00       		.byte	0
+ 2834 007c 0A       		.uleb128 0xa
+ 2835 007d 05       		.uleb128 0x5
+ 2836 007e 00       		.byte	0
+ 2837 007f 03       		.uleb128 0x3
+ 2838 0080 08       		.uleb128 0x8
+ 2839 0081 3A       		.uleb128 0x3a
+ 2840 0082 0B       		.uleb128 0xb
+ 2841 0083 3B       		.uleb128 0x3b
+ 2842 0084 0B       		.uleb128 0xb
+ 2843 0085 49       		.uleb128 0x49
+ 2844 0086 13       		.uleb128 0x13
+ 2845 0087 02       		.uleb128 0x2
+ 2846 0088 17       		.uleb128 0x17
+ 2847 0089 00       		.byte	0
+ 2848 008a 00       		.byte	0
+ 2849 008b 0B       		.uleb128 0xb
+ 2850 008c 34       		.uleb128 0x34
+ 2851 008d 00       		.byte	0
+ 2852 008e 03       		.uleb128 0x3
+ 2853 008f 0E       		.uleb128 0xe
+ 2854 0090 3A       		.uleb128 0x3a
+ 2855 0091 0B       		.uleb128 0xb
+ 2856 0092 3B       		.uleb128 0x3b
+ 2857 0093 0B       		.uleb128 0xb
+ 2858 0094 49       		.uleb128 0x49
+ 2859 0095 13       		.uleb128 0x13
+ 2860 0096 02       		.uleb128 0x2
+ 2861 0097 17       		.uleb128 0x17
+ 2862 0098 00       		.byte	0
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqwyLbK.s 			page 61
+
+
+ 2863 0099 00       		.byte	0
+ 2864 009a 0C       		.uleb128 0xc
+ 2865 009b 898201   		.uleb128 0x4109
+ 2866 009e 00       		.byte	0
+ 2867 009f 11       		.uleb128 0x11
+ 2868 00a0 01       		.uleb128 0x1
+ 2869 00a1 31       		.uleb128 0x31
+ 2870 00a2 13       		.uleb128 0x13
+ 2871 00a3 00       		.byte	0
+ 2872 00a4 00       		.byte	0
+ 2873 00a5 0D       		.uleb128 0xd
+ 2874 00a6 0F       		.uleb128 0xf
+ 2875 00a7 00       		.byte	0
+ 2876 00a8 0B       		.uleb128 0xb
+ 2877 00a9 0B       		.uleb128 0xb
+ 2878 00aa 49       		.uleb128 0x49
+ 2879 00ab 13       		.uleb128 0x13
+ 2880 00ac 00       		.byte	0
+ 2881 00ad 00       		.byte	0
+ 2882 00ae 0E       		.uleb128 0xe
+ 2883 00af 26       		.uleb128 0x26
+ 2884 00b0 00       		.byte	0
+ 2885 00b1 49       		.uleb128 0x49
+ 2886 00b2 13       		.uleb128 0x13
+ 2887 00b3 00       		.byte	0
+ 2888 00b4 00       		.byte	0
+ 2889 00b5 0F       		.uleb128 0xf
+ 2890 00b6 898201   		.uleb128 0x4109
+ 2891 00b9 01       		.byte	0x1
+ 2892 00ba 11       		.uleb128 0x11
+ 2893 00bb 01       		.uleb128 0x1
+ 2894 00bc 31       		.uleb128 0x31
+ 2895 00bd 13       		.uleb128 0x13
+ 2896 00be 01       		.uleb128 0x1
+ 2897 00bf 13       		.uleb128 0x13
+ 2898 00c0 00       		.byte	0
+ 2899 00c1 00       		.byte	0
+ 2900 00c2 10       		.uleb128 0x10
+ 2901 00c3 8A8201   		.uleb128 0x410a
+ 2902 00c6 00       		.byte	0
+ 2903 00c7 02       		.uleb128 0x2
+ 2904 00c8 18       		.uleb128 0x18
+ 2905 00c9 9142     		.uleb128 0x2111
+ 2906 00cb 18       		.uleb128 0x18
+ 2907 00cc 00       		.byte	0
+ 2908 00cd 00       		.byte	0
+ 2909 00ce 11       		.uleb128 0x11
+ 2910 00cf 2E       		.uleb128 0x2e
+ 2911 00d0 01       		.byte	0x1
+ 2912 00d1 03       		.uleb128 0x3
+ 2913 00d2 0E       		.uleb128 0xe
+ 2914 00d3 3A       		.uleb128 0x3a
+ 2915 00d4 0B       		.uleb128 0xb
+ 2916 00d5 3B       		.uleb128 0x3b
+ 2917 00d6 0B       		.uleb128 0xb
+ 2918 00d7 27       		.uleb128 0x27
+ 2919 00d8 19       		.uleb128 0x19
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqwyLbK.s 			page 62
+
+
+ 2920 00d9 49       		.uleb128 0x49
+ 2921 00da 13       		.uleb128 0x13
+ 2922 00db 11       		.uleb128 0x11
+ 2923 00dc 01       		.uleb128 0x1
+ 2924 00dd 12       		.uleb128 0x12
+ 2925 00de 06       		.uleb128 0x6
+ 2926 00df 40       		.uleb128 0x40
+ 2927 00e0 18       		.uleb128 0x18
+ 2928 00e1 9742     		.uleb128 0x2117
+ 2929 00e3 19       		.uleb128 0x19
+ 2930 00e4 01       		.uleb128 0x1
+ 2931 00e5 13       		.uleb128 0x13
+ 2932 00e6 00       		.byte	0
+ 2933 00e7 00       		.byte	0
+ 2934 00e8 12       		.uleb128 0x12
+ 2935 00e9 34       		.uleb128 0x34
+ 2936 00ea 00       		.byte	0
+ 2937 00eb 03       		.uleb128 0x3
+ 2938 00ec 08       		.uleb128 0x8
+ 2939 00ed 3A       		.uleb128 0x3a
+ 2940 00ee 0B       		.uleb128 0xb
+ 2941 00ef 3B       		.uleb128 0x3b
+ 2942 00f0 0B       		.uleb128 0xb
+ 2943 00f1 49       		.uleb128 0x49
+ 2944 00f2 13       		.uleb128 0x13
+ 2945 00f3 02       		.uleb128 0x2
+ 2946 00f4 18       		.uleb128 0x18
+ 2947 00f5 00       		.byte	0
+ 2948 00f6 00       		.byte	0
+ 2949 00f7 13       		.uleb128 0x13
+ 2950 00f8 34       		.uleb128 0x34
+ 2951 00f9 00       		.byte	0
+ 2952 00fa 03       		.uleb128 0x3
+ 2953 00fb 08       		.uleb128 0x8
+ 2954 00fc 3A       		.uleb128 0x3a
+ 2955 00fd 0B       		.uleb128 0xb
+ 2956 00fe 3B       		.uleb128 0x3b
+ 2957 00ff 0B       		.uleb128 0xb
+ 2958 0100 49       		.uleb128 0x49
+ 2959 0101 13       		.uleb128 0x13
+ 2960 0102 02       		.uleb128 0x2
+ 2961 0103 17       		.uleb128 0x17
+ 2962 0104 00       		.byte	0
+ 2963 0105 00       		.byte	0
+ 2964 0106 14       		.uleb128 0x14
+ 2965 0107 898201   		.uleb128 0x4109
+ 2966 010a 01       		.byte	0x1
+ 2967 010b 11       		.uleb128 0x11
+ 2968 010c 01       		.uleb128 0x1
+ 2969 010d 31       		.uleb128 0x31
+ 2970 010e 13       		.uleb128 0x13
+ 2971 010f 00       		.byte	0
+ 2972 0110 00       		.byte	0
+ 2973 0111 15       		.uleb128 0x15
+ 2974 0112 01       		.uleb128 0x1
+ 2975 0113 01       		.byte	0x1
+ 2976 0114 49       		.uleb128 0x49
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqwyLbK.s 			page 63
+
+
+ 2977 0115 13       		.uleb128 0x13
+ 2978 0116 01       		.uleb128 0x1
+ 2979 0117 13       		.uleb128 0x13
+ 2980 0118 00       		.byte	0
+ 2981 0119 00       		.byte	0
+ 2982 011a 16       		.uleb128 0x16
+ 2983 011b 21       		.uleb128 0x21
+ 2984 011c 00       		.byte	0
+ 2985 011d 49       		.uleb128 0x49
+ 2986 011e 13       		.uleb128 0x13
+ 2987 011f 2F       		.uleb128 0x2f
+ 2988 0120 0B       		.uleb128 0xb
+ 2989 0121 00       		.byte	0
+ 2990 0122 00       		.byte	0
+ 2991 0123 17       		.uleb128 0x17
+ 2992 0124 2E       		.uleb128 0x2e
+ 2993 0125 01       		.byte	0x1
+ 2994 0126 03       		.uleb128 0x3
+ 2995 0127 0E       		.uleb128 0xe
+ 2996 0128 3A       		.uleb128 0x3a
+ 2997 0129 0B       		.uleb128 0xb
+ 2998 012a 3B       		.uleb128 0x3b
+ 2999 012b 05       		.uleb128 0x5
+ 3000 012c 27       		.uleb128 0x27
+ 3001 012d 19       		.uleb128 0x19
+ 3002 012e 49       		.uleb128 0x49
+ 3003 012f 13       		.uleb128 0x13
+ 3004 0130 11       		.uleb128 0x11
+ 3005 0131 01       		.uleb128 0x1
+ 3006 0132 12       		.uleb128 0x12
+ 3007 0133 06       		.uleb128 0x6
+ 3008 0134 40       		.uleb128 0x40
+ 3009 0135 18       		.uleb128 0x18
+ 3010 0136 9742     		.uleb128 0x2117
+ 3011 0138 19       		.uleb128 0x19
+ 3012 0139 01       		.uleb128 0x1
+ 3013 013a 13       		.uleb128 0x13
+ 3014 013b 00       		.byte	0
+ 3015 013c 00       		.byte	0
+ 3016 013d 18       		.uleb128 0x18
+ 3017 013e 05       		.uleb128 0x5
+ 3018 013f 00       		.byte	0
+ 3019 0140 03       		.uleb128 0x3
+ 3020 0141 0E       		.uleb128 0xe
+ 3021 0142 3A       		.uleb128 0x3a
+ 3022 0143 0B       		.uleb128 0xb
+ 3023 0144 3B       		.uleb128 0x3b
+ 3024 0145 05       		.uleb128 0x5
+ 3025 0146 49       		.uleb128 0x49
+ 3026 0147 13       		.uleb128 0x13
+ 3027 0148 02       		.uleb128 0x2
+ 3028 0149 17       		.uleb128 0x17
+ 3029 014a 00       		.byte	0
+ 3030 014b 00       		.byte	0
+ 3031 014c 19       		.uleb128 0x19
+ 3032 014d 34       		.uleb128 0x34
+ 3033 014e 00       		.byte	0
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqwyLbK.s 			page 64
+
+
+ 3034 014f 03       		.uleb128 0x3
+ 3035 0150 08       		.uleb128 0x8
+ 3036 0151 3A       		.uleb128 0x3a
+ 3037 0152 0B       		.uleb128 0xb
+ 3038 0153 3B       		.uleb128 0x3b
+ 3039 0154 05       		.uleb128 0x5
+ 3040 0155 49       		.uleb128 0x49
+ 3041 0156 13       		.uleb128 0x13
+ 3042 0157 02       		.uleb128 0x2
+ 3043 0158 18       		.uleb128 0x18
+ 3044 0159 00       		.byte	0
+ 3045 015a 00       		.byte	0
+ 3046 015b 1A       		.uleb128 0x1a
+ 3047 015c 05       		.uleb128 0x5
+ 3048 015d 00       		.byte	0
+ 3049 015e 03       		.uleb128 0x3
+ 3050 015f 08       		.uleb128 0x8
+ 3051 0160 3A       		.uleb128 0x3a
+ 3052 0161 0B       		.uleb128 0xb
+ 3053 0162 3B       		.uleb128 0x3b
+ 3054 0163 05       		.uleb128 0x5
+ 3055 0164 49       		.uleb128 0x49
+ 3056 0165 13       		.uleb128 0x13
+ 3057 0166 02       		.uleb128 0x2
+ 3058 0167 17       		.uleb128 0x17
+ 3059 0168 00       		.byte	0
+ 3060 0169 00       		.byte	0
+ 3061 016a 1B       		.uleb128 0x1b
+ 3062 016b 34       		.uleb128 0x34
+ 3063 016c 00       		.byte	0
+ 3064 016d 03       		.uleb128 0x3
+ 3065 016e 08       		.uleb128 0x8
+ 3066 016f 3A       		.uleb128 0x3a
+ 3067 0170 0B       		.uleb128 0xb
+ 3068 0171 3B       		.uleb128 0x3b
+ 3069 0172 05       		.uleb128 0x5
+ 3070 0173 49       		.uleb128 0x49
+ 3071 0174 13       		.uleb128 0x13
+ 3072 0175 02       		.uleb128 0x2
+ 3073 0176 17       		.uleb128 0x17
+ 3074 0177 00       		.byte	0
+ 3075 0178 00       		.byte	0
+ 3076 0179 1C       		.uleb128 0x1c
+ 3077 017a 2E       		.uleb128 0x2e
+ 3078 017b 01       		.byte	0x1
+ 3079 017c 3F       		.uleb128 0x3f
+ 3080 017d 19       		.uleb128 0x19
+ 3081 017e 03       		.uleb128 0x3
+ 3082 017f 0E       		.uleb128 0xe
+ 3083 0180 3A       		.uleb128 0x3a
+ 3084 0181 0B       		.uleb128 0xb
+ 3085 0182 3B       		.uleb128 0x3b
+ 3086 0183 05       		.uleb128 0x5
+ 3087 0184 27       		.uleb128 0x27
+ 3088 0185 19       		.uleb128 0x19
+ 3089 0186 49       		.uleb128 0x49
+ 3090 0187 13       		.uleb128 0x13
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqwyLbK.s 			page 65
+
+
+ 3091 0188 11       		.uleb128 0x11
+ 3092 0189 01       		.uleb128 0x1
+ 3093 018a 12       		.uleb128 0x12
+ 3094 018b 06       		.uleb128 0x6
+ 3095 018c 40       		.uleb128 0x40
+ 3096 018d 18       		.uleb128 0x18
+ 3097 018e 9742     		.uleb128 0x2117
+ 3098 0190 19       		.uleb128 0x19
+ 3099 0191 01       		.uleb128 0x1
+ 3100 0192 13       		.uleb128 0x13
+ 3101 0193 00       		.byte	0
+ 3102 0194 00       		.byte	0
+ 3103 0195 1D       		.uleb128 0x1d
+ 3104 0196 34       		.uleb128 0x34
+ 3105 0197 00       		.byte	0
+ 3106 0198 03       		.uleb128 0x3
+ 3107 0199 0E       		.uleb128 0xe
+ 3108 019a 3A       		.uleb128 0x3a
+ 3109 019b 0B       		.uleb128 0xb
+ 3110 019c 3B       		.uleb128 0x3b
+ 3111 019d 0B       		.uleb128 0xb
+ 3112 019e 49       		.uleb128 0x49
+ 3113 019f 13       		.uleb128 0x13
+ 3114 01a0 02       		.uleb128 0x2
+ 3115 01a1 18       		.uleb128 0x18
+ 3116 01a2 00       		.byte	0
+ 3117 01a3 00       		.byte	0
+ 3118 01a4 1E       		.uleb128 0x1e
+ 3119 01a5 34       		.uleb128 0x34
+ 3120 01a6 00       		.byte	0
+ 3121 01a7 03       		.uleb128 0x3
+ 3122 01a8 0E       		.uleb128 0xe
+ 3123 01a9 3A       		.uleb128 0x3a
+ 3124 01aa 0B       		.uleb128 0xb
+ 3125 01ab 3B       		.uleb128 0x3b
+ 3126 01ac 05       		.uleb128 0x5
+ 3127 01ad 49       		.uleb128 0x49
+ 3128 01ae 13       		.uleb128 0x13
+ 3129 01af 3F       		.uleb128 0x3f
+ 3130 01b0 19       		.uleb128 0x19
+ 3131 01b1 3C       		.uleb128 0x3c
+ 3132 01b2 19       		.uleb128 0x19
+ 3133 01b3 00       		.byte	0
+ 3134 01b4 00       		.byte	0
+ 3135 01b5 1F       		.uleb128 0x1f
+ 3136 01b6 35       		.uleb128 0x35
+ 3137 01b7 00       		.byte	0
+ 3138 01b8 49       		.uleb128 0x49
+ 3139 01b9 13       		.uleb128 0x13
+ 3140 01ba 00       		.byte	0
+ 3141 01bb 00       		.byte	0
+ 3142 01bc 20       		.uleb128 0x20
+ 3143 01bd 2E       		.uleb128 0x2e
+ 3144 01be 00       		.byte	0
+ 3145 01bf 3F       		.uleb128 0x3f
+ 3146 01c0 19       		.uleb128 0x19
+ 3147 01c1 3C       		.uleb128 0x3c
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqwyLbK.s 			page 66
+
+
+ 3148 01c2 19       		.uleb128 0x19
+ 3149 01c3 6E       		.uleb128 0x6e
+ 3150 01c4 0E       		.uleb128 0xe
+ 3151 01c5 03       		.uleb128 0x3
+ 3152 01c6 0E       		.uleb128 0xe
+ 3153 01c7 3A       		.uleb128 0x3a
+ 3154 01c8 0B       		.uleb128 0xb
+ 3155 01c9 3B       		.uleb128 0x3b
+ 3156 01ca 0B       		.uleb128 0xb
+ 3157 01cb 00       		.byte	0
+ 3158 01cc 00       		.byte	0
+ 3159 01cd 00       		.byte	0
+ 3160              		.section	.debug_loc,"",%progbits
+ 3161              	.Ldebug_loc0:
+ 3162              	.LLST0:
+ 3163 0000 00000000 		.4byte	.LVL0
+ 3164 0004 09000000 		.4byte	.LVL1-1
+ 3165 0008 0100     		.2byte	0x1
+ 3166 000a 50       		.byte	0x50
+ 3167 000b 09000000 		.4byte	.LVL1-1
+ 3168 000f 28000000 		.4byte	.LFE63
+ 3169 0013 0100     		.2byte	0x1
+ 3170 0015 56       		.byte	0x56
+ 3171 0016 00000000 		.4byte	0
+ 3172 001a 00000000 		.4byte	0
+ 3173              	.LLST1:
+ 3174 001e 00000000 		.4byte	.LVL0
+ 3175 0022 09000000 		.4byte	.LVL1-1
+ 3176 0026 0100     		.2byte	0x1
+ 3177 0028 51       		.byte	0x51
+ 3178 0029 09000000 		.4byte	.LVL1-1
+ 3179 002d 28000000 		.4byte	.LFE63
+ 3180 0031 0100     		.2byte	0x1
+ 3181 0033 55       		.byte	0x55
+ 3182 0034 00000000 		.4byte	0
+ 3183 0038 00000000 		.4byte	0
+ 3184              	.LLST2:
+ 3185 003c 0E000000 		.4byte	.LVL2
+ 3186 0040 12000000 		.4byte	.LVL3
+ 3187 0044 0200     		.2byte	0x2
+ 3188 0046 30       		.byte	0x30
+ 3189 0047 9F       		.byte	0x9f
+ 3190 0048 12000000 		.4byte	.LVL3
+ 3191 004c 28000000 		.4byte	.LFE63
+ 3192 0050 0100     		.2byte	0x1
+ 3193 0052 54       		.byte	0x54
+ 3194 0053 00000000 		.4byte	0
+ 3195 0057 00000000 		.4byte	0
+ 3196              	.LLST3:
+ 3197 005b 00000000 		.4byte	.LVL7
+ 3198 005f 09000000 		.4byte	.LVL8-1
+ 3199 0063 0100     		.2byte	0x1
+ 3200 0065 50       		.byte	0x50
+ 3201 0066 09000000 		.4byte	.LVL8-1
+ 3202 006a 10000000 		.4byte	.LVL10
+ 3203 006e 0100     		.2byte	0x1
+ 3204 0070 55       		.byte	0x55
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqwyLbK.s 			page 67
+
+
+ 3205 0071 10000000 		.4byte	.LVL10
+ 3206 0075 12000000 		.4byte	.LVL11
+ 3207 0079 0100     		.2byte	0x1
+ 3208 007b 56       		.byte	0x56
+ 3209 007c 12000000 		.4byte	.LVL11
+ 3210 0080 28000000 		.4byte	.LVL15
+ 3211 0084 0100     		.2byte	0x1
+ 3212 0086 55       		.byte	0x55
+ 3213 0087 28000000 		.4byte	.LVL15
+ 3214 008b 34000000 		.4byte	.LFE64
+ 3215 008f 0100     		.2byte	0x1
+ 3216 0091 56       		.byte	0x56
+ 3217 0092 00000000 		.4byte	0
+ 3218 0096 00000000 		.4byte	0
+ 3219              	.LLST4:
+ 3220 009a 00000000 		.4byte	.LVL7
+ 3221 009e 09000000 		.4byte	.LVL8-1
+ 3222 00a2 0100     		.2byte	0x1
+ 3223 00a4 51       		.byte	0x51
+ 3224 00a5 09000000 		.4byte	.LVL8-1
+ 3225 00a9 2E000000 		.4byte	.LVL17
+ 3226 00ad 0100     		.2byte	0x1
+ 3227 00af 54       		.byte	0x54
+ 3228 00b0 2E000000 		.4byte	.LVL17
+ 3229 00b4 30000000 		.4byte	.LVL18
+ 3230 00b8 0300     		.2byte	0x3
+ 3231 00ba 74       		.byte	0x74
+ 3232 00bb 7F       		.sleb128 -1
+ 3233 00bc 9F       		.byte	0x9f
+ 3234 00bd 30000000 		.4byte	.LVL18
+ 3235 00c1 34000000 		.4byte	.LFE64
+ 3236 00c5 0100     		.2byte	0x1
+ 3237 00c7 54       		.byte	0x54
+ 3238 00c8 00000000 		.4byte	0
+ 3239 00cc 00000000 		.4byte	0
+ 3240              	.LLST5:
+ 3241 00d0 04000000 		.4byte	.LVL19
+ 3242 00d4 0A000000 		.4byte	.LVL20
+ 3243 00d8 0400     		.2byte	0x4
+ 3244 00da 0A       		.byte	0xa
+ 3245 00db 8813     		.2byte	0x1388
+ 3246 00dd 9F       		.byte	0x9f
+ 3247 00de 0A000000 		.4byte	.LVL20
+ 3248 00e2 32000000 		.4byte	.LFE65
+ 3249 00e6 0100     		.2byte	0x1
+ 3250 00e8 54       		.byte	0x54
+ 3251 00e9 00000000 		.4byte	0
+ 3252 00ed 00000000 		.4byte	0
+ 3253              	.LLST6:
+ 3254 00f1 00000000 		.4byte	.LVL24
+ 3255 00f5 0E000000 		.4byte	.LVL26
+ 3256 00f9 0100     		.2byte	0x1
+ 3257 00fb 50       		.byte	0x50
+ 3258 00fc 0E000000 		.4byte	.LVL26
+ 3259 0100 4C000000 		.4byte	.LFE68
+ 3260 0104 0100     		.2byte	0x1
+ 3261 0106 55       		.byte	0x55
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqwyLbK.s 			page 68
+
+
+ 3262 0107 00000000 		.4byte	0
+ 3263 010b 00000000 		.4byte	0
+ 3264              	.LLST7:
+ 3265 010f 00000000 		.4byte	.LVL24
+ 3266 0113 0E000000 		.4byte	.LVL26
+ 3267 0117 0100     		.2byte	0x1
+ 3268 0119 51       		.byte	0x51
+ 3269 011a 0E000000 		.4byte	.LVL26
+ 3270 011e 4C000000 		.4byte	.LFE68
+ 3271 0122 0100     		.2byte	0x1
+ 3272 0124 56       		.byte	0x56
+ 3273 0125 00000000 		.4byte	0
+ 3274 0129 00000000 		.4byte	0
+ 3275              	.LLST8:
+ 3276 012d 08000000 		.4byte	.LVL25
+ 3277 0131 0E000000 		.4byte	.LVL26
+ 3278 0135 0400     		.2byte	0x4
+ 3279 0137 0A       		.byte	0xa
+ 3280 0138 E803     		.2byte	0x3e8
+ 3281 013a 9F       		.byte	0x9f
+ 3282 013b 0E000000 		.4byte	.LVL26
+ 3283 013f 4C000000 		.4byte	.LFE68
+ 3284 0143 0100     		.2byte	0x1
+ 3285 0145 54       		.byte	0x54
+ 3286 0146 00000000 		.4byte	0
+ 3287 014a 00000000 		.4byte	0
+ 3288              	.LLST9:
+ 3289 014e 00000000 		.4byte	.LVL32
+ 3290 0152 0B000000 		.4byte	.LVL33-1
+ 3291 0156 0100     		.2byte	0x1
+ 3292 0158 50       		.byte	0x50
+ 3293 0159 0B000000 		.4byte	.LVL33-1
+ 3294 015d 62000000 		.4byte	.LFE69
+ 3295 0161 0100     		.2byte	0x1
+ 3296 0163 55       		.byte	0x55
+ 3297 0164 00000000 		.4byte	0
+ 3298 0168 00000000 		.4byte	0
+ 3299              	.LLST10:
+ 3300 016c 00000000 		.4byte	.LVL32
+ 3301 0170 0B000000 		.4byte	.LVL33-1
+ 3302 0174 0100     		.2byte	0x1
+ 3303 0176 51       		.byte	0x51
+ 3304 0177 0B000000 		.4byte	.LVL33-1
+ 3305 017b 62000000 		.4byte	.LFE69
+ 3306 017f 0400     		.2byte	0x4
+ 3307 0181 F3       		.byte	0xf3
+ 3308 0182 01       		.uleb128 0x1
+ 3309 0183 51       		.byte	0x51
+ 3310 0184 9F       		.byte	0x9f
+ 3311 0185 00000000 		.4byte	0
+ 3312 0189 00000000 		.4byte	0
+ 3313              	.LLST11:
+ 3314 018d 00000000 		.4byte	.LVL48
+ 3315 0191 12000000 		.4byte	.LVL49
+ 3316 0195 0100     		.2byte	0x1
+ 3317 0197 50       		.byte	0x50
+ 3318 0198 12000000 		.4byte	.LVL49
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqwyLbK.s 			page 69
+
+
+ 3319 019c 7E000000 		.4byte	.LVL61
+ 3320 01a0 0100     		.2byte	0x1
+ 3321 01a2 54       		.byte	0x54
+ 3322 01a3 9C000000 		.4byte	.LVL64
+ 3323 01a7 9E000000 		.4byte	.LVL65
+ 3324 01ab 0100     		.2byte	0x1
+ 3325 01ad 54       		.byte	0x54
+ 3326 01ae 00000000 		.4byte	0
+ 3327 01b2 00000000 		.4byte	0
+ 3328              	.LLST12:
+ 3329 01b6 00000000 		.4byte	.LVL48
+ 3330 01ba 14000000 		.4byte	.LVL50
+ 3331 01be 0100     		.2byte	0x1
+ 3332 01c0 51       		.byte	0x51
+ 3333 01c1 14000000 		.4byte	.LVL50
+ 3334 01c5 A2000000 		.4byte	.LFE70
+ 3335 01c9 0100     		.2byte	0x1
+ 3336 01cb 55       		.byte	0x55
+ 3337 01cc 00000000 		.4byte	0
+ 3338 01d0 00000000 		.4byte	0
+ 3339              	.LLST13:
+ 3340 01d4 1A000000 		.4byte	.LVL51
+ 3341 01d8 1E000000 		.4byte	.LVL52
+ 3342 01dc 0100     		.2byte	0x1
+ 3343 01de 50       		.byte	0x50
+ 3344 01df 4E000000 		.4byte	.LVL55
+ 3345 01e3 56000000 		.4byte	.LVL56
+ 3346 01e7 0200     		.2byte	0x2
+ 3347 01e9 31       		.byte	0x31
+ 3348 01ea 9F       		.byte	0x9f
+ 3349 01eb 56000000 		.4byte	.LVL56
+ 3350 01ef 67000000 		.4byte	.LVL58-1
+ 3351 01f3 0100     		.2byte	0x1
+ 3352 01f5 53       		.byte	0x53
+ 3353 01f6 7E000000 		.4byte	.LVL61
+ 3354 01fa 94000000 		.4byte	.LVL63
+ 3355 01fe 0100     		.2byte	0x1
+ 3356 0200 54       		.byte	0x54
+ 3357 0201 94000000 		.4byte	.LVL63
+ 3358 0205 9C000000 		.4byte	.LVL64
+ 3359 0209 0100     		.2byte	0x1
+ 3360 020b 53       		.byte	0x53
+ 3361 020c 00000000 		.4byte	0
+ 3362 0210 00000000 		.4byte	0
+ 3363              	.LLST14:
+ 3364 0214 00000000 		.4byte	.LVL66
+ 3365 0218 06000000 		.4byte	.LVL67
+ 3366 021c 0100     		.2byte	0x1
+ 3367 021e 50       		.byte	0x50
+ 3368 021f 06000000 		.4byte	.LVL67
+ 3369 0223 08000000 		.4byte	.LVL68
+ 3370 0227 0400     		.2byte	0x4
+ 3371 0229 F3       		.byte	0xf3
+ 3372 022a 01       		.uleb128 0x1
+ 3373 022b 50       		.byte	0x50
+ 3374 022c 9F       		.byte	0x9f
+ 3375 022d 08000000 		.4byte	.LVL68
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqwyLbK.s 			page 70
+
+
+ 3376 0231 0A000000 		.4byte	.LVL69
+ 3377 0235 0100     		.2byte	0x1
+ 3378 0237 50       		.byte	0x50
+ 3379 0238 0A000000 		.4byte	.LVL69
+ 3380 023c 10000000 		.4byte	.LFE71
+ 3381 0240 0400     		.2byte	0x4
+ 3382 0242 F3       		.byte	0xf3
+ 3383 0243 01       		.uleb128 0x1
+ 3384 0244 50       		.byte	0x50
+ 3385 0245 9F       		.byte	0x9f
+ 3386 0246 00000000 		.4byte	0
+ 3387 024a 00000000 		.4byte	0
+ 3388              	.LLST15:
+ 3389 024e 00000000 		.4byte	.LVL70
+ 3390 0252 0E000000 		.4byte	.LVL71
+ 3391 0256 0100     		.2byte	0x1
+ 3392 0258 50       		.byte	0x50
+ 3393 0259 0E000000 		.4byte	.LVL71
+ 3394 025d 14010000 		.4byte	.LVL117
+ 3395 0261 0400     		.2byte	0x4
+ 3396 0263 F3       		.byte	0xf3
+ 3397 0264 01       		.uleb128 0x1
+ 3398 0265 50       		.byte	0x50
+ 3399 0266 9F       		.byte	0x9f
+ 3400 0267 14010000 		.4byte	.LVL117
+ 3401 026b 16010000 		.4byte	.LVL118
+ 3402 026f 0100     		.2byte	0x1
+ 3403 0271 50       		.byte	0x50
+ 3404 0272 16010000 		.4byte	.LVL118
+ 3405 0276 24010000 		.4byte	.LFE72
+ 3406 027a 0400     		.2byte	0x4
+ 3407 027c F3       		.byte	0xf3
+ 3408 027d 01       		.uleb128 0x1
+ 3409 027e 50       		.byte	0x50
+ 3410 027f 9F       		.byte	0x9f
+ 3411 0280 00000000 		.4byte	0
+ 3412 0284 00000000 		.4byte	0
+ 3413              	.LLST16:
+ 3414 0288 12000000 		.4byte	.LVL72
+ 3415 028c 16000000 		.4byte	.LVL73
+ 3416 0290 0200     		.2byte	0x2
+ 3417 0292 3A       		.byte	0x3a
+ 3418 0293 9F       		.byte	0x9f
+ 3419 0294 16000000 		.4byte	.LVL73
+ 3420 0298 20000000 		.4byte	.LVL75
+ 3421 029c 0100     		.2byte	0x1
+ 3422 029e 54       		.byte	0x54
+ 3423 029f 22000000 		.4byte	.LVL76
+ 3424 02a3 5C000000 		.4byte	.LVL81
+ 3425 02a7 0100     		.2byte	0x1
+ 3426 02a9 54       		.byte	0x54
+ 3427 02aa 74000000 		.4byte	.LVL85
+ 3428 02ae 78000000 		.4byte	.LVL86
+ 3429 02b2 0100     		.2byte	0x1
+ 3430 02b4 54       		.byte	0x54
+ 3431 02b5 A0000000 		.4byte	.LVL90
+ 3432 02b9 B0000000 		.4byte	.LVL92
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqwyLbK.s 			page 71
+
+
+ 3433 02bd 0100     		.2byte	0x1
+ 3434 02bf 54       		.byte	0x54
+ 3435 02c0 B2000000 		.4byte	.LVL93
+ 3436 02c4 B6000000 		.4byte	.LVL94
+ 3437 02c8 0100     		.2byte	0x1
+ 3438 02ca 54       		.byte	0x54
+ 3439 02cb E4000000 		.4byte	.LVL100
+ 3440 02cf E6000000 		.4byte	.LVL101
+ 3441 02d3 0100     		.2byte	0x1
+ 3442 02d5 54       		.byte	0x54
+ 3443 02d6 E8000000 		.4byte	.LVL102
+ 3444 02da EA000000 		.4byte	.LVL103
+ 3445 02de 0100     		.2byte	0x1
+ 3446 02e0 54       		.byte	0x54
+ 3447 02e1 00000000 		.4byte	0
+ 3448 02e5 00000000 		.4byte	0
+ 3449              	.LLST17:
+ 3450 02e9 26000000 		.4byte	.LVL77
+ 3451 02ed B6000000 		.4byte	.LVL94
+ 3452 02f1 0200     		.2byte	0x2
+ 3453 02f3 30       		.byte	0x30
+ 3454 02f4 9F       		.byte	0x9f
+ 3455 02f5 B6000000 		.4byte	.LVL94
+ 3456 02f9 E4000000 		.4byte	.LVL100
+ 3457 02fd 0100     		.2byte	0x1
+ 3458 02ff 54       		.byte	0x54
+ 3459 0300 E4000000 		.4byte	.LVL100
+ 3460 0304 F8000000 		.4byte	.LVL110
+ 3461 0308 0200     		.2byte	0x2
+ 3462 030a 30       		.byte	0x30
+ 3463 030b 9F       		.byte	0x9f
+ 3464 030c F8000000 		.4byte	.LVL110
+ 3465 0310 FA000000 		.4byte	.LVL111
+ 3466 0314 0100     		.2byte	0x1
+ 3467 0316 54       		.byte	0x54
+ 3468 0317 FC000000 		.4byte	.LVL112
+ 3469 031b 06010000 		.4byte	.LVL114
+ 3470 031f 0100     		.2byte	0x1
+ 3471 0321 54       		.byte	0x54
+ 3472 0322 06010000 		.4byte	.LVL114
+ 3473 0326 0F010000 		.4byte	.LVL116-1
+ 3474 032a 0500     		.2byte	0x5
+ 3475 032c 03       		.byte	0x3
+ 3476 032d 00000000 		.4byte	CardType
+ 3477 0331 00000000 		.4byte	0
+ 3478 0335 00000000 		.4byte	0
+ 3479              	.LLST18:
+ 3480 0339 B6000000 		.4byte	.LVL94
+ 3481 033d E4000000 		.4byte	.LVL100
+ 3482 0341 0100     		.2byte	0x1
+ 3483 0343 56       		.byte	0x56
+ 3484 0344 F8000000 		.4byte	.LVL110
+ 3485 0348 FE000000 		.4byte	.LVL113
+ 3486 034c 0100     		.2byte	0x1
+ 3487 034e 56       		.byte	0x56
+ 3488 034f 00000000 		.4byte	0
+ 3489 0353 00000000 		.4byte	0
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqwyLbK.s 			page 72
+
+
+ 3490              	.LLST19:
+ 3491 0357 5C000000 		.4byte	.LVL81
+ 3492 035b 74000000 		.4byte	.LVL85
+ 3493 035f 0100     		.2byte	0x1
+ 3494 0361 54       		.byte	0x54
+ 3495 0362 78000000 		.4byte	.LVL86
+ 3496 0366 9E000000 		.4byte	.LVL89
+ 3497 036a 0100     		.2byte	0x1
+ 3498 036c 54       		.byte	0x54
+ 3499 036d B6000000 		.4byte	.LVL94
+ 3500 0371 BC000000 		.4byte	.LVL95
+ 3501 0375 0400     		.2byte	0x4
+ 3502 0377 0A       		.byte	0xa
+ 3503 0378 E803     		.2byte	0x3e8
+ 3504 037a 9F       		.byte	0x9f
+ 3505 037b BC000000 		.4byte	.LVL95
+ 3506 037f E4000000 		.4byte	.LVL100
+ 3507 0383 0100     		.2byte	0x1
+ 3508 0385 55       		.byte	0x55
+ 3509 0386 EC000000 		.4byte	.LVL104
+ 3510 038a EE000000 		.4byte	.LVL105
+ 3511 038e 0100     		.2byte	0x1
+ 3512 0390 54       		.byte	0x54
+ 3513 0391 F0000000 		.4byte	.LVL106
+ 3514 0395 F2000000 		.4byte	.LVL107
+ 3515 0399 0100     		.2byte	0x1
+ 3516 039b 54       		.byte	0x54
+ 3517 039c F4000000 		.4byte	.LVL108
+ 3518 03a0 F6000000 		.4byte	.LVL109
+ 3519 03a4 0100     		.2byte	0x1
+ 3520 03a6 54       		.byte	0x54
+ 3521 03a7 F8000000 		.4byte	.LVL110
+ 3522 03ab FE000000 		.4byte	.LVL113
+ 3523 03af 0100     		.2byte	0x1
+ 3524 03b1 55       		.byte	0x55
+ 3525 03b2 00000000 		.4byte	0
+ 3526 03b6 00000000 		.4byte	0
+ 3527              	.LLST20:
+ 3528 03ba 08010000 		.4byte	.LVL115
+ 3529 03be 14010000 		.4byte	.LVL117
+ 3530 03c2 0100     		.2byte	0x1
+ 3531 03c4 54       		.byte	0x54
+ 3532 03c5 18010000 		.4byte	.LVL119
+ 3533 03c9 1C010000 		.4byte	.LVL120
+ 3534 03cd 0100     		.2byte	0x1
+ 3535 03cf 54       		.byte	0x54
+ 3536 03d0 1C010000 		.4byte	.LVL120
+ 3537 03d4 24010000 		.4byte	.LFE72
+ 3538 03d8 0100     		.2byte	0x1
+ 3539 03da 50       		.byte	0x50
+ 3540 03db 00000000 		.4byte	0
+ 3541 03df 00000000 		.4byte	0
+ 3542              	.LLST21:
+ 3543 03e3 00000000 		.4byte	.LVL121
+ 3544 03e7 0B000000 		.4byte	.LVL122-1
+ 3545 03eb 0100     		.2byte	0x1
+ 3546 03ed 50       		.byte	0x50
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqwyLbK.s 			page 73
+
+
+ 3547 03ee 0B000000 		.4byte	.LVL122-1
+ 3548 03f2 68000000 		.4byte	.LFE73
+ 3549 03f6 0400     		.2byte	0x4
+ 3550 03f8 F3       		.byte	0xf3
+ 3551 03f9 01       		.uleb128 0x1
+ 3552 03fa 50       		.byte	0x50
+ 3553 03fb 9F       		.byte	0x9f
+ 3554 03fc 00000000 		.4byte	0
+ 3555 0400 00000000 		.4byte	0
+ 3556              	.LLST22:
+ 3557 0404 00000000 		.4byte	.LVL121
+ 3558 0408 0B000000 		.4byte	.LVL122-1
+ 3559 040c 0100     		.2byte	0x1
+ 3560 040e 51       		.byte	0x51
+ 3561 040f 0B000000 		.4byte	.LVL122-1
+ 3562 0413 62000000 		.4byte	.LVL132
+ 3563 0417 0100     		.2byte	0x1
+ 3564 0419 55       		.byte	0x55
+ 3565 041a 62000000 		.4byte	.LVL132
+ 3566 041e 68000000 		.4byte	.LFE73
+ 3567 0422 0400     		.2byte	0x4
+ 3568 0424 F3       		.byte	0xf3
+ 3569 0425 01       		.uleb128 0x1
+ 3570 0426 51       		.byte	0x51
+ 3571 0427 9F       		.byte	0x9f
+ 3572 0428 00000000 		.4byte	0
+ 3573 042c 00000000 		.4byte	0
+ 3574              	.LLST23:
+ 3575 0430 00000000 		.4byte	.LVL121
+ 3576 0434 0B000000 		.4byte	.LVL122-1
+ 3577 0438 0100     		.2byte	0x1
+ 3578 043a 52       		.byte	0x52
+ 3579 043b 0B000000 		.4byte	.LVL122-1
+ 3580 043f 62000000 		.4byte	.LVL132
+ 3581 0443 0100     		.2byte	0x1
+ 3582 0445 56       		.byte	0x56
+ 3583 0446 62000000 		.4byte	.LVL132
+ 3584 044a 68000000 		.4byte	.LFE73
+ 3585 044e 0400     		.2byte	0x4
+ 3586 0450 F3       		.byte	0xf3
+ 3587 0451 01       		.uleb128 0x1
+ 3588 0452 52       		.byte	0x52
+ 3589 0453 9F       		.byte	0x9f
+ 3590 0454 00000000 		.4byte	0
+ 3591 0458 00000000 		.4byte	0
+ 3592              	.LLST24:
+ 3593 045c 00000000 		.4byte	.LVL121
+ 3594 0460 0B000000 		.4byte	.LVL122-1
+ 3595 0464 0100     		.2byte	0x1
+ 3596 0466 53       		.byte	0x53
+ 3597 0467 0B000000 		.4byte	.LVL122-1
+ 3598 046b 42000000 		.4byte	.LVL127
+ 3599 046f 0100     		.2byte	0x1
+ 3600 0471 54       		.byte	0x54
+ 3601 0472 42000000 		.4byte	.LVL127
+ 3602 0476 44000000 		.4byte	.LVL128
+ 3603 047a 0300     		.2byte	0x3
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqwyLbK.s 			page 74
+
+
+ 3604 047c 74       		.byte	0x74
+ 3605 047d 7F       		.sleb128 -1
+ 3606 047e 9F       		.byte	0x9f
+ 3607 047f 44000000 		.4byte	.LVL128
+ 3608 0483 62000000 		.4byte	.LVL132
+ 3609 0487 0100     		.2byte	0x1
+ 3610 0489 54       		.byte	0x54
+ 3611 048a 62000000 		.4byte	.LVL132
+ 3612 048e 68000000 		.4byte	.LFE73
+ 3613 0492 0400     		.2byte	0x4
+ 3614 0494 F3       		.byte	0xf3
+ 3615 0495 01       		.uleb128 0x1
+ 3616 0496 53       		.byte	0x53
+ 3617 0497 9F       		.byte	0x9f
+ 3618 0498 00000000 		.4byte	0
+ 3619 049c 00000000 		.4byte	0
+ 3620              	.LLST25:
+ 3621 04a0 28000000 		.4byte	.LVL124
+ 3622 04a4 5E000000 		.4byte	.LVL131
+ 3623 04a8 0100     		.2byte	0x1
+ 3624 04aa 57       		.byte	0x57
+ 3625 04ab 00000000 		.4byte	0
+ 3626 04af 00000000 		.4byte	0
+ 3627              	.LLST26:
+ 3628 04b3 00000000 		.4byte	.LVL133
+ 3629 04b7 0B000000 		.4byte	.LVL134-1
+ 3630 04bb 0100     		.2byte	0x1
+ 3631 04bd 50       		.byte	0x50
+ 3632 04be 0B000000 		.4byte	.LVL134-1
+ 3633 04c2 88000000 		.4byte	.LFE74
+ 3634 04c6 0400     		.2byte	0x4
+ 3635 04c8 F3       		.byte	0xf3
+ 3636 04c9 01       		.uleb128 0x1
+ 3637 04ca 50       		.byte	0x50
+ 3638 04cb 9F       		.byte	0x9f
+ 3639 04cc 00000000 		.4byte	0
+ 3640 04d0 00000000 		.4byte	0
+ 3641              	.LLST27:
+ 3642 04d4 00000000 		.4byte	.LVL133
+ 3643 04d8 0B000000 		.4byte	.LVL134-1
+ 3644 04dc 0100     		.2byte	0x1
+ 3645 04de 51       		.byte	0x51
+ 3646 04df 0B000000 		.4byte	.LVL134-1
+ 3647 04e3 84000000 		.4byte	.LVL149
+ 3648 04e7 0100     		.2byte	0x1
+ 3649 04e9 55       		.byte	0x55
+ 3650 04ea 84000000 		.4byte	.LVL149
+ 3651 04ee 88000000 		.4byte	.LFE74
+ 3652 04f2 0400     		.2byte	0x4
+ 3653 04f4 F3       		.byte	0xf3
+ 3654 04f5 01       		.uleb128 0x1
+ 3655 04f6 51       		.byte	0x51
+ 3656 04f7 9F       		.byte	0x9f
+ 3657 04f8 00000000 		.4byte	0
+ 3658 04fc 00000000 		.4byte	0
+ 3659              	.LLST28:
+ 3660 0500 00000000 		.4byte	.LVL133
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqwyLbK.s 			page 75
+
+
+ 3661 0504 0B000000 		.4byte	.LVL134-1
+ 3662 0508 0100     		.2byte	0x1
+ 3663 050a 52       		.byte	0x52
+ 3664 050b 0B000000 		.4byte	.LVL134-1
+ 3665 050f 84000000 		.4byte	.LVL149
+ 3666 0513 0100     		.2byte	0x1
+ 3667 0515 56       		.byte	0x56
+ 3668 0516 84000000 		.4byte	.LVL149
+ 3669 051a 88000000 		.4byte	.LFE74
+ 3670 051e 0400     		.2byte	0x4
+ 3671 0520 F3       		.byte	0xf3
+ 3672 0521 01       		.uleb128 0x1
+ 3673 0522 52       		.byte	0x52
+ 3674 0523 9F       		.byte	0x9f
+ 3675 0524 00000000 		.4byte	0
+ 3676 0528 00000000 		.4byte	0
+ 3677              	.LLST29:
+ 3678 052c 00000000 		.4byte	.LVL133
+ 3679 0530 0B000000 		.4byte	.LVL134-1
+ 3680 0534 0100     		.2byte	0x1
+ 3681 0536 53       		.byte	0x53
+ 3682 0537 0B000000 		.4byte	.LVL134-1
+ 3683 053b 5E000000 		.4byte	.LVL141
+ 3684 053f 0100     		.2byte	0x1
+ 3685 0541 54       		.byte	0x54
+ 3686 0542 5E000000 		.4byte	.LVL141
+ 3687 0546 60000000 		.4byte	.LVL142
+ 3688 054a 0300     		.2byte	0x3
+ 3689 054c 74       		.byte	0x74
+ 3690 054d 7F       		.sleb128 -1
+ 3691 054e 9F       		.byte	0x9f
+ 3692 054f 60000000 		.4byte	.LVL142
+ 3693 0553 70000000 		.4byte	.LVL144
+ 3694 0557 0100     		.2byte	0x1
+ 3695 0559 54       		.byte	0x54
+ 3696 055a 70000000 		.4byte	.LVL144
+ 3697 055e 72000000 		.4byte	.LVL145
+ 3698 0562 0400     		.2byte	0x4
+ 3699 0564 F3       		.byte	0xf3
+ 3700 0565 01       		.uleb128 0x1
+ 3701 0566 53       		.byte	0x53
+ 3702 0567 9F       		.byte	0x9f
+ 3703 0568 72000000 		.4byte	.LVL145
+ 3704 056c 84000000 		.4byte	.LVL149
+ 3705 0570 0100     		.2byte	0x1
+ 3706 0572 54       		.byte	0x54
+ 3707 0573 84000000 		.4byte	.LVL149
+ 3708 0577 88000000 		.4byte	.LFE74
+ 3709 057b 0400     		.2byte	0x4
+ 3710 057d F3       		.byte	0xf3
+ 3711 057e 01       		.uleb128 0x1
+ 3712 057f 53       		.byte	0x53
+ 3713 0580 9F       		.byte	0x9f
+ 3714 0581 00000000 		.4byte	0
+ 3715 0585 00000000 		.4byte	0
+ 3716              	.LLST30:
+ 3717 0589 00000000 		.4byte	.LVL150
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqwyLbK.s 			page 76
+
+
+ 3718 058d 0B000000 		.4byte	.LVL151-1
+ 3719 0591 0100     		.2byte	0x1
+ 3720 0593 50       		.byte	0x50
+ 3721 0594 0B000000 		.4byte	.LVL151-1
+ 3722 0598 DA000000 		.4byte	.LFE75
+ 3723 059c 0400     		.2byte	0x4
+ 3724 059e F3       		.byte	0xf3
+ 3725 059f 01       		.uleb128 0x1
+ 3726 05a0 50       		.byte	0x50
+ 3727 05a1 9F       		.byte	0x9f
+ 3728 05a2 00000000 		.4byte	0
+ 3729 05a6 00000000 		.4byte	0
+ 3730              	.LLST31:
+ 3731 05aa 00000000 		.4byte	.LVL150
+ 3732 05ae 0B000000 		.4byte	.LVL151-1
+ 3733 05b2 0100     		.2byte	0x1
+ 3734 05b4 51       		.byte	0x51
+ 3735 05b5 0B000000 		.4byte	.LVL151-1
+ 3736 05b9 DA000000 		.4byte	.LFE75
+ 3737 05bd 0400     		.2byte	0x4
+ 3738 05bf F3       		.byte	0xf3
+ 3739 05c0 01       		.uleb128 0x1
+ 3740 05c1 51       		.byte	0x51
+ 3741 05c2 9F       		.byte	0x9f
+ 3742 05c3 00000000 		.4byte	0
+ 3743 05c7 00000000 		.4byte	0
+ 3744              	.LLST32:
+ 3745 05cb 00000000 		.4byte	.LVL150
+ 3746 05cf 0B000000 		.4byte	.LVL151-1
+ 3747 05d3 0100     		.2byte	0x1
+ 3748 05d5 52       		.byte	0x52
+ 3749 05d6 0B000000 		.4byte	.LVL151-1
+ 3750 05da DA000000 		.4byte	.LFE75
+ 3751 05de 0100     		.2byte	0x1
+ 3752 05e0 55       		.byte	0x55
+ 3753 05e1 00000000 		.4byte	0
+ 3754 05e5 00000000 		.4byte	0
+ 3755              	.LLST33:
+ 3756 05e9 12000000 		.4byte	.LVL152
+ 3757 05ed BA000000 		.4byte	.LVL165
+ 3758 05f1 0200     		.2byte	0x2
+ 3759 05f3 31       		.byte	0x31
+ 3760 05f4 9F       		.byte	0x9f
+ 3761 05f5 BA000000 		.4byte	.LVL165
+ 3762 05f9 BE000000 		.4byte	.LVL166
+ 3763 05fd 0200     		.2byte	0x2
+ 3764 05ff 30       		.byte	0x30
+ 3765 0600 9F       		.byte	0x9f
+ 3766 0601 BE000000 		.4byte	.LVL166
+ 3767 0605 CC000000 		.4byte	.LVL167
+ 3768 0609 0200     		.2byte	0x2
+ 3769 060b 31       		.byte	0x31
+ 3770 060c 9F       		.byte	0x9f
+ 3771 060d CC000000 		.4byte	.LVL167
+ 3772 0611 D4000000 		.4byte	.LVL169
+ 3773 0615 0100     		.2byte	0x1
+ 3774 0617 54       		.byte	0x54
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqwyLbK.s 			page 77
+
+
+ 3775 0618 00000000 		.4byte	0
+ 3776 061c 00000000 		.4byte	0
+ 3777              	.LLST34:
+ 3778 0620 8E000000 		.4byte	.LVL159
+ 3779 0624 AC000000 		.4byte	.LVL161
+ 3780 0628 0100     		.2byte	0x1
+ 3781 062a 53       		.byte	0x53
+ 3782 062b AC000000 		.4byte	.LVL161
+ 3783 062f B0000000 		.4byte	.LVL162
+ 3784 0633 0300     		.2byte	0x3
+ 3785 0635 73       		.byte	0x73
+ 3786 0636 09       		.sleb128 9
+ 3787 0637 9F       		.byte	0x9f
+ 3788 0638 B0000000 		.4byte	.LVL162
+ 3789 063c B2000000 		.4byte	.LVL163
+ 3790 0640 2200     		.2byte	0x22
+ 3791 0642 91       		.byte	0x91
+ 3792 0643 69       		.sleb128 -23
+ 3793 0644 94       		.byte	0x94
+ 3794 0645 01       		.byte	0x1
+ 3795 0646 08       		.byte	0x8
+ 3796 0647 FF       		.byte	0xff
+ 3797 0648 1A       		.byte	0x1a
+ 3798 0649 31       		.byte	0x31
+ 3799 064a 24       		.byte	0x24
+ 3800 064b 36       		.byte	0x36
+ 3801 064c 1A       		.byte	0x1a
+ 3802 064d 91       		.byte	0x91
+ 3803 064e 6A       		.sleb128 -22
+ 3804 064f 94       		.byte	0x94
+ 3805 0650 01       		.byte	0x1
+ 3806 0651 08       		.byte	0x8
+ 3807 0652 FF       		.byte	0xff
+ 3808 0653 1A       		.byte	0x1a
+ 3809 0654 37       		.byte	0x37
+ 3810 0655 25       		.byte	0x25
+ 3811 0656 22       		.byte	0x22
+ 3812 0657 91       		.byte	0x91
+ 3813 0658 65       		.sleb128 -27
+ 3814 0659 94       		.byte	0x94
+ 3815 065a 01       		.byte	0x1
+ 3816 065b 3F       		.byte	0x3f
+ 3817 065c 1A       		.byte	0x1a
+ 3818 065d 08       		.byte	0x8
+ 3819 065e FF       		.byte	0xff
+ 3820 065f 1A       		.byte	0x1a
+ 3821 0660 22       		.byte	0x22
+ 3822 0661 23       		.byte	0x23
+ 3823 0662 02       		.uleb128 0x2
+ 3824 0663 9F       		.byte	0x9f
+ 3825 0664 00000000 		.4byte	0
+ 3826 0668 00000000 		.4byte	0
+ 3827              	.LLST35:
+ 3828 066c 66000000 		.4byte	.LVL156
+ 3829 0670 68000000 		.4byte	.LVL157
+ 3830 0674 0100     		.2byte	0x1
+ 3831 0676 53       		.byte	0x53
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqwyLbK.s 			page 78
+
+
+ 3832 0677 68000000 		.4byte	.LVL157
+ 3833 067b 6A000000 		.4byte	.LVL158
+ 3834 067f 1400     		.2byte	0x14
+ 3835 0681 91       		.byte	0x91
+ 3836 0682 67       		.sleb128 -25
+ 3837 0683 94       		.byte	0x94
+ 3838 0684 01       		.byte	0x1
+ 3839 0685 08       		.byte	0x8
+ 3840 0686 FF       		.byte	0xff
+ 3841 0687 1A       		.byte	0x1a
+ 3842 0688 40       		.byte	0x40
+ 3843 0689 24       		.byte	0x24
+ 3844 068a 08       		.byte	0x8
+ 3845 068b FC       		.byte	0xfc
+ 3846 068c 3E       		.byte	0x3e
+ 3847 068d 24       		.byte	0x24
+ 3848 068e 1A       		.byte	0x1a
+ 3849 068f 72       		.byte	0x72
+ 3850 0690 00       		.sleb128 0
+ 3851 0691 22       		.byte	0x22
+ 3852 0692 23       		.byte	0x23
+ 3853 0693 01       		.uleb128 0x1
+ 3854 0694 9F       		.byte	0x9f
+ 3855 0695 AA000000 		.4byte	.LVL160
+ 3856 0699 B6000000 		.4byte	.LVL164
+ 3857 069d 0100     		.2byte	0x1
+ 3858 069f 52       		.byte	0x52
+ 3859 06a0 00000000 		.4byte	0
+ 3860 06a4 00000000 		.4byte	0
+ 3861              		.section	.debug_aranges,"",%progbits
+ 3862 0000 7C000000 		.4byte	0x7c
+ 3863 0004 0200     		.2byte	0x2
+ 3864 0006 00000000 		.4byte	.Ldebug_info0
+ 3865 000a 04       		.byte	0x4
+ 3866 000b 00       		.byte	0
+ 3867 000c 0000     		.2byte	0
+ 3868 000e 0000     		.2byte	0
+ 3869 0010 00000000 		.4byte	.LFB63
+ 3870 0014 28000000 		.4byte	.LFE63-.LFB63
+ 3871 0018 00000000 		.4byte	.LFB64
+ 3872 001c 34000000 		.4byte	.LFE64-.LFB64
+ 3873 0020 00000000 		.4byte	.LFB65
+ 3874 0024 32000000 		.4byte	.LFE65-.LFB65
+ 3875 0028 00000000 		.4byte	.LFB68
+ 3876 002c 4C000000 		.4byte	.LFE68-.LFB68
+ 3877 0030 00000000 		.4byte	.LFB69
+ 3878 0034 62000000 		.4byte	.LFE69-.LFB69
+ 3879 0038 00000000 		.4byte	.LFB66
+ 3880 003c 20000000 		.4byte	.LFE66-.LFB66
+ 3881 0040 00000000 		.4byte	.LFB67
+ 3882 0044 30000000 		.4byte	.LFE67-.LFB67
+ 3883 0048 00000000 		.4byte	.LFB70
+ 3884 004c A2000000 		.4byte	.LFE70-.LFB70
+ 3885 0050 00000000 		.4byte	.LFB71
+ 3886 0054 10000000 		.4byte	.LFE71-.LFB71
+ 3887 0058 00000000 		.4byte	.LFB72
+ 3888 005c 24010000 		.4byte	.LFE72-.LFB72
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqwyLbK.s 			page 79
+
+
+ 3889 0060 00000000 		.4byte	.LFB73
+ 3890 0064 68000000 		.4byte	.LFE73-.LFB73
+ 3891 0068 00000000 		.4byte	.LFB74
+ 3892 006c 88000000 		.4byte	.LFE74-.LFB74
+ 3893 0070 00000000 		.4byte	.LFB75
+ 3894 0074 DA000000 		.4byte	.LFE75-.LFB75
+ 3895 0078 00000000 		.4byte	0
+ 3896 007c 00000000 		.4byte	0
+ 3897              		.section	.debug_ranges,"",%progbits
+ 3898              	.Ldebug_ranges0:
+ 3899 0000 00000000 		.4byte	.LFB63
+ 3900 0004 28000000 		.4byte	.LFE63
+ 3901 0008 00000000 		.4byte	.LFB64
+ 3902 000c 34000000 		.4byte	.LFE64
+ 3903 0010 00000000 		.4byte	.LFB65
+ 3904 0014 32000000 		.4byte	.LFE65
+ 3905 0018 00000000 		.4byte	.LFB68
+ 3906 001c 4C000000 		.4byte	.LFE68
+ 3907 0020 00000000 		.4byte	.LFB69
+ 3908 0024 62000000 		.4byte	.LFE69
+ 3909 0028 00000000 		.4byte	.LFB66
+ 3910 002c 20000000 		.4byte	.LFE66
+ 3911 0030 00000000 		.4byte	.LFB67
+ 3912 0034 30000000 		.4byte	.LFE67
+ 3913 0038 00000000 		.4byte	.LFB70
+ 3914 003c A2000000 		.4byte	.LFE70
+ 3915 0040 00000000 		.4byte	.LFB71
+ 3916 0044 10000000 		.4byte	.LFE71
+ 3917 0048 00000000 		.4byte	.LFB72
+ 3918 004c 24010000 		.4byte	.LFE72
+ 3919 0050 00000000 		.4byte	.LFB73
+ 3920 0054 68000000 		.4byte	.LFE73
+ 3921 0058 00000000 		.4byte	.LFB74
+ 3922 005c 88000000 		.4byte	.LFE74
+ 3923 0060 00000000 		.4byte	.LFB75
+ 3924 0064 DA000000 		.4byte	.LFE75
+ 3925 0068 00000000 		.4byte	0
+ 3926 006c 00000000 		.4byte	0
+ 3927              		.section	.debug_line,"",%progbits
+ 3928              	.Ldebug_line0:
+ 3929 0000 E8030000 		.section	.debug_str,"MS",%progbits,1
+ 3929      02008801 
+ 3929      00000201 
+ 3929      FB0E0D00 
+ 3929      01010101 
+ 3930              	.LASF34:
+ 3931 0000 746F6B65 		.ascii	"token\000"
+ 3931      6E00
+ 3932              	.LASF28:
+ 3933 0006 786D6974 		.ascii	"xmit_mmc\000"
+ 3933      5F6D6D63 
+ 3933      00
+ 3934              	.LASF12:
+ 3935 000f 5245535F 		.ascii	"RES_ERROR\000"
+ 3935      4552524F 
+ 3935      5200
+ 3936              	.LASF11:
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqwyLbK.s 			page 80
+
+
+ 3937 0019 5245535F 		.ascii	"RES_OK\000"
+ 3937      4F4B00
+ 3938              	.LASF1:
+ 3939 0020 73686F72 		.ascii	"short int\000"
+ 3939      7420696E 
+ 3939      7400
+ 3940              	.LASF50:
+ 3941 002a 5350495F 		.ascii	"SPI_WriteTxData\000"
+ 3941      57726974 
+ 3941      65547844 
+ 3941      61746100 
+ 3942              	.LASF46:
+ 3943 003a 53746174 		.ascii	"Stat\000"
+ 3943      00
+ 3944              	.LASF53:
+ 3945 003f 5350495F 		.ascii	"SPI_ReadRxData\000"
+ 3945      52656164 
+ 3945      52784461 
+ 3945      746100
+ 3946              	.LASF36:
+ 3947 004e 73656C65 		.ascii	"select\000"
+ 3947      637400
+ 3948              	.LASF27:
+ 3949 0055 62756666 		.ascii	"buff\000"
+ 3949      00
+ 3950              	.LASF2:
+ 3951 005a 42595445 		.ascii	"BYTE\000"
+ 3951      00
+ 3952              	.LASF47:
+ 3953 005f 43617264 		.ascii	"CardType\000"
+ 3953      54797065 
+ 3953      00
+ 3954              	.LASF35:
+ 3955 0068 64657365 		.ascii	"deselect\000"
+ 3955      6C656374 
+ 3955      00
+ 3956              	.LASF48:
+ 3957 0071 5350495F 		.ascii	"SPI_ClearTxBuffer\000"
+ 3957      436C6561 
+ 3957      72547842 
+ 3957      75666665 
+ 3957      7200
+ 3958              	.LASF29:
+ 3959 0083 72637672 		.ascii	"rcvr_mmc\000"
+ 3959      5F6D6D63 
+ 3959      00
+ 3960              	.LASF41:
+ 3961 008c 73656374 		.ascii	"sector\000"
+ 3961      6F7200
+ 3962              	.LASF22:
+ 3963 0093 666C6F61 		.ascii	"float\000"
+ 3963      7400
+ 3964              	.LASF19:
+ 3965 0099 6C6F6E67 		.ascii	"long long int\000"
+ 3965      206C6F6E 
+ 3965      6720696E 
+ 3965      7400
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqwyLbK.s 			page 81
+
+
+ 3966              	.LASF7:
+ 3967 00a7 6C6F6E67 		.ascii	"long int\000"
+ 3967      20696E74 
+ 3967      00
+ 3968              	.LASF13:
+ 3969 00b0 5245535F 		.ascii	"RES_WRPRT\000"
+ 3969      57525052 
+ 3969      5400
+ 3970              	.LASF39:
+ 3971 00ba 6469736B 		.ascii	"disk_initialize\000"
+ 3971      5F696E69 
+ 3971      7469616C 
+ 3971      697A6500 
+ 3972              	.LASF5:
+ 3973 00ca 55494E54 		.ascii	"UINT\000"
+ 3973      00
+ 3974              	.LASF38:
+ 3975 00cf 6469736B 		.ascii	"disk_status\000"
+ 3975      5F737461 
+ 3975      74757300 
+ 3976              	.LASF40:
+ 3977 00db 6469736B 		.ascii	"disk_read\000"
+ 3977      5F726561 
+ 3977      6400
+ 3978              	.LASF3:
+ 3979 00e5 574F5244 		.ascii	"WORD\000"
+ 3979      00
+ 3980              	.LASF0:
+ 3981 00ea 756E7369 		.ascii	"unsigned char\000"
+ 3981      676E6564 
+ 3981      20636861 
+ 3981      7200
+ 3982              	.LASF8:
+ 3983 00f8 44574F52 		.ascii	"DWORD\000"
+ 3983      4400
+ 3984              	.LASF25:
+ 3985 00fe 6C6F6E67 		.ascii	"long double\000"
+ 3985      20646F75 
+ 3985      626C6500 
+ 3986              	.LASF52:
+ 3987 010a 43794465 		.ascii	"CyDelayUs\000"
+ 3987      6C617955 
+ 3987      7300
+ 3988              	.LASF55:
+ 3989 0114 474E5520 		.ascii	"GNU C11 5.4.1 20160609 (release) [ARM/embedded-5-br"
+ 3989      43313120 
+ 3989      352E342E 
+ 3989      31203230 
+ 3989      31363036 
+ 3990 0147 616E6368 		.ascii	"anch revision 237715] -mcpu=cortex-m3 -mthumb -g -O"
+ 3990      20726576 
+ 3990      6973696F 
+ 3990      6E203233 
+ 3990      37373135 
+ 3991 017a 67202D66 		.ascii	"g -ffunction-sections -ffat-lto-objects -finline-fu"
+ 3991      66756E63 
+ 3991      74696F6E 
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqwyLbK.s 			page 82
+
+
+ 3991      2D736563 
+ 3991      74696F6E 
+ 3992 01ad 6E637469 		.ascii	"nctions\000"
+ 3992      6F6E7300 
+ 3993              	.LASF17:
+ 3994 01b5 7369676E 		.ascii	"signed char\000"
+ 3994      65642063 
+ 3994      68617200 
+ 3995              	.LASF20:
+ 3996 01c1 6C6F6E67 		.ascii	"long long unsigned int\000"
+ 3996      206C6F6E 
+ 3996      6720756E 
+ 3996      7369676E 
+ 3996      65642069 
+ 3997              	.LASF6:
+ 3998 01d8 756E7369 		.ascii	"unsigned int\000"
+ 3998      676E6564 
+ 3998      20696E74 
+ 3998      00
+ 3999              	.LASF57:
+ 4000 01e5 443A5C47 		.ascii	"D:\\GitHub\\PSoC5_uGUI_SD_Sample\\PSoC_Project\\TFT"
+ 4000      69744875 
+ 4000      625C5053 
+ 4000      6F43355F 
+ 4000      75475549 
+ 4001 0214 5F746573 		.ascii	"_test.cydsn\000"
+ 4001      742E6379 
+ 4001      64736E00 
+ 4002              	.LASF56:
+ 4003 0220 46617446 		.ascii	"FatFs_Library\\sdcard.c\000"
+ 4003      735F4C69 
+ 4003      62726172 
+ 4003      795C7364 
+ 4003      63617264 
+ 4004              	.LASF43:
+ 4005 0237 6469736B 		.ascii	"disk_write\000"
+ 4005      5F777269 
+ 4005      746500
+ 4006              	.LASF51:
+ 4007 0242 5350495F 		.ascii	"SPI_GetTxBufferSize\000"
+ 4007      47657454 
+ 4007      78427566 
+ 4007      66657253 
+ 4007      697A6500 
+ 4008              	.LASF4:
+ 4009 0256 73686F72 		.ascii	"short unsigned int\000"
+ 4009      7420756E 
+ 4009      7369676E 
+ 4009      65642069 
+ 4009      6E7400
+ 4010              	.LASF44:
+ 4011 0269 6469736B 		.ascii	"disk_ioctl\000"
+ 4011      5F696F63 
+ 4011      746C00
+ 4012              	.LASF24:
+ 4013 0274 63686172 		.ascii	"char\000"
+ 4013      00
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqwyLbK.s 			page 83
+
+
+ 4014              	.LASF32:
+ 4015 0279 72637672 		.ascii	"rcvr_datablock\000"
+ 4015      5F646174 
+ 4015      61626C6F 
+ 4015      636B00
+ 4016              	.LASF21:
+ 4017 0288 696E7433 		.ascii	"int32_t\000"
+ 4017      325F7400 
+ 4018              	.LASF14:
+ 4019 0290 5245535F 		.ascii	"RES_NOTRDY\000"
+ 4019      4E4F5452 
+ 4019      445900
+ 4020              	.LASF9:
+ 4021 029b 6C6F6E67 		.ascii	"long unsigned int\000"
+ 4021      20756E73 
+ 4021      69676E65 
+ 4021      6420696E 
+ 4021      7400
+ 4022              	.LASF45:
+ 4023 02ad 6374726C 		.ascii	"ctrl\000"
+ 4023      00
+ 4024              	.LASF49:
+ 4025 02b2 5350495F 		.ascii	"SPI_ClearRxBuffer\000"
+ 4025      436C6561 
+ 4025      72527842 
+ 4025      75666665 
+ 4025      7200
+ 4026              	.LASF33:
+ 4027 02c4 786D6974 		.ascii	"xmit_datablock\000"
+ 4027      5F646174 
+ 4027      61626C6F 
+ 4027      636B00
+ 4028              	.LASF42:
+ 4029 02d3 636F756E 		.ascii	"count\000"
+ 4029      7400
+ 4030              	.LASF54:
+ 4031 02d9 5350495F 		.ascii	"SPI_SS_Write\000"
+ 4031      53535F57 
+ 4031      72697465 
+ 4031      00
+ 4032              	.LASF18:
+ 4033 02e6 5F5F696E 		.ascii	"__int32_t\000"
+ 4033      7433325F 
+ 4033      7400
+ 4034              	.LASF16:
+ 4035 02f0 44524553 		.ascii	"DRESULT\000"
+ 4035      554C5400 
+ 4036              	.LASF26:
+ 4037 02f8 73697A65 		.ascii	"sizetype\000"
+ 4037      74797065 
+ 4037      00
+ 4038              	.LASF30:
+ 4039 0301 6C6F6F70 		.ascii	"loop\000"
+ 4039      00
+ 4040              	.LASF23:
+ 4041 0306 646F7562 		.ascii	"double\000"
+ 4041      6C6500
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqwyLbK.s 			page 84
+
+
+ 4042              	.LASF10:
+ 4043 030d 44535441 		.ascii	"DSTATUS\000"
+ 4043      54555300 
+ 4044              	.LASF58:
+ 4045 0315 49544D5F 		.ascii	"ITM_RxBuffer\000"
+ 4045      52784275 
+ 4045      66666572 
+ 4045      00
+ 4046              	.LASF15:
+ 4047 0322 5245535F 		.ascii	"RES_PARERR\000"
+ 4047      50415245 
+ 4047      525200
+ 4048              	.LASF37:
+ 4049 032d 73656E64 		.ascii	"send_cmd\000"
+ 4049      5F636D64 
+ 4049      00
+ 4050              	.LASF31:
+ 4051 0336 77616974 		.ascii	"wait_ready\000"
+ 4051      5F726561 
+ 4051      647900
+ 4052              		.ident	"GCC: (GNU Tools for ARM Embedded Processors) 5.4.1 20160609 (release) [ARM/embedded-5-bran

@@ -3407,11 +3407,6 @@
     </Group>
   </Group>
   <Group key="Pin2">
-    <Group key="0a1fcc43-3065-40d8-90a9-c144fee7ba45">
-      <Group key="0">
-        <Data key="Port Format" value="12,5" />
-      </Group>
-    </Group>
     <Group key="05a2f3ec-f4da-4f8f-9c12-1cfbf11b1732">
       <Group key="0">
         <Data key="Port Format" value="12,6" />
@@ -3424,7 +3419,7 @@
     </Group>
     <Group key="8d318d8b-cf7b-4b6b-b02c-ab1c5c49d0ba">
       <Group key="0">
-        <Data key="Port Format" value="1,2" />
+        <Data key="Port Format" value="6,5" />
       </Group>
     </Group>
     <Group key="26ed46ad-79fc-4383-9ebb-8e8fa8b02379">
@@ -3434,7 +3429,7 @@
     </Group>
     <Group key="44df8176-e81d-4bbd-a6f3-01e0ed7d641c">
       <Group key="0">
-        <Data key="Port Format" value="12,2" />
+        <Data key="Port Format" value="12,5" />
       </Group>
     </Group>
     <Group key="63bde9ac-9e27-4f9a-b1cd-7a2aba8b6076">
@@ -3454,12 +3449,12 @@
     </Group>
     <Group key="83b2fde2-60ad-45b6-9e5c-cb3baa6e3f9a">
       <Group key="0">
-        <Data key="Port Format" value="12,3" />
+        <Data key="Port Format" value="6,4" />
       </Group>
     </Group>
     <Group key="1425177d-0d0e-4468-8bcc-e638e5509a9b">
       <Group key="0">
-        <Data key="Port Format" value="12,0" />
+        <Data key="Port Format" value="6,7" />
       </Group>
     </Group>
     <Group key="ba0564db-8e40-4550-b087-8e7c4367c991">
@@ -3536,15 +3531,17 @@
     </Group>
     <Group key="e8d4c370-7cae-4fa5-956e-f2a50c5bc6b7">
       <Group key="0">
-        <Data key="Port Format" value="12,1" />
-      </Group>
-    </Group>
-    <Group key="e851a3b9-efb8-48be-bbb8-b303b216c393">
-      <Group key="0">
         <Data key="Port Format" value="6,6" />
       </Group>
     </Group>
-    <Group key="UnAssigned Pins" />
+    <Group key="UnAssigned Pins">
+      <Group key="0a1fcc43-3065-40d8-90a9-c144fee7ba45">
+        <Data key="0" value="132130901436760907" />
+      </Group>
+      <Group key="e851a3b9-efb8-48be-bbb8-b303b216c393">
+        <Data key="0" value="132130901187649288" />
+      </Group>
+    </Group>
   </Group>
   <Group key="PlaceDir">
     <Data key="count" value="0" />

@@ -190,7 +190,7 @@ int main(void)
         if(XPT2046_IRQ == 0)        // Touch IRQ
         {
             
-            XPT2046_ReadPos(0x90);
+         Py =   XPT2046_ReadPos(0x90);              /*  A2 = 0; A1 = 0; A0 = 0; */
             Py = XPT2046_ReadPos(0x90);
             XPT2046_ReadPos(0xd0);
             Px = XPT2046_ReadPos(0xd0);

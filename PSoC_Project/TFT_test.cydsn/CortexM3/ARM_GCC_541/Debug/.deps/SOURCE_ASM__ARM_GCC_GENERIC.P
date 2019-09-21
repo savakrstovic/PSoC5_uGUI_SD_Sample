@@ -1,0 +1,10 @@
+D:/GitHub/PSoC5_uGUI_SD_Sample/PSoC_Project/TFT_test.cydsn/CortexM3/ARM_GCC_541/Debug/CyBootAsmGnu.o : D:/GitHub/PSoC5_uGUI_SD_Sample/PSoC_Project/TFT_test.cydsn/Generated_Source/PSoC5/CyBootAsmGnu.s D:/GitHub/PSoC5_uGUI_SD_Sample/PSoC_Project/TFT_test.cydsn/Generated_Source/PSoC5/cydevicegnu.inc D:/GitHub/PSoC5_uGUI_SD_Sample/PSoC_Project/TFT_test.cydsn/Generated_Source/PSoC5/cydevicegnu_trm.inc D:/GitHub/PSoC5_uGUI_SD_Sample/PSoC_Project/TFT_test.cydsn/Generated_Source/PSoC5/cyfittergnu.inc 
+
+D:/GitHub/PSoC5_uGUI_SD_Sample/PSoC_Project/TFT_test.cydsn/Generated_Source/PSoC5/CyBootAsmGnu.s : 
+
+D:/GitHub/PSoC5_uGUI_SD_Sample/PSoC_Project/TFT_test.cydsn/Generated_Source/PSoC5/cydevicegnu.inc : 
+
+D:/GitHub/PSoC5_uGUI_SD_Sample/PSoC_Project/TFT_test.cydsn/Generated_Source/PSoC5/cydevicegnu_trm.inc : 
+
+D:/GitHub/PSoC5_uGUI_SD_Sample/PSoC_Project/TFT_test.cydsn/Generated_Source/PSoC5/cyfittergnu.inc : 
+

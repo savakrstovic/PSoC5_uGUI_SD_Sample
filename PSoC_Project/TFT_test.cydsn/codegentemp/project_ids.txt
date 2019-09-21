@@ -1,0 +1,7 @@
+D:\GitHub\PSoC5_uGUI_SD_Sample\PSoC_Project\TFT_test.cydsn\TFT_test.cyprj|83fe3037-f3af-4afc-a0f9-b7939eba37de
+C:\Program Files (x86)\Cypress\PSoC Creator\4.2\PSoC Creator\psoc\content\default\CyAnnotationLibrary\CyAnnotationLibrary.cylib\CyAnnotationLibrary.cyprj|0553de6e-1956-47c5-a9e0-95da65ea4a69
+C:\Users\Sava\Documents\PSoC Creator\4.2\Downloads ( 4.2).cylib\Downloads ( 4.2).cyprj|6e635881-ce3f-4894-b645-80f971acfba6
+C:\Users\Sava\Documents\PSoC Creator\4.1\Downloads ( 4.1).cylib\Downloads ( 4.1).cyprj|85924d9f-0123-4e8c-99be-875a37c93a6a
+C:\Program Files (x86)\Cypress\PSoC Creator\4.2\PSoC Creator\psoc\content\cycomponentlibraryupdates\CyComponentLibraryUpdates.cylib\CyComponentLibraryUpdates.cyprj|adb6ae8e-0454-4798-ada7-1f0f1391bfdf
+C:\Program Files (x86)\Cypress\PSoC Creator\4.2\PSoC Creator\psoc\content\cycomponentlibrary\CyComponentLibrary.cylib\CyComponentLibrary.cyprj|716237be-27e8-4caa-a18e-eeb197bff59c
+C:\Program Files (x86)\Cypress\PSoC Creator\4.2\PSoC Creator\psoc\content\cyprimitives\CyPrimitives.cylib\CyPrimitives.cyprj|2c627439-9668-4b68-83b0-47fd2f694ef0

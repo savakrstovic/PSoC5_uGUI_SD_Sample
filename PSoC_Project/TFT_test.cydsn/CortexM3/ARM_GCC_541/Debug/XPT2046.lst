@@ -1,0 +1,3370 @@
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqVWbXA.s 			page 1
+
+
+   1              		.syntax unified
+   2              		.cpu cortex-m3
+   3              		.fpu softvfp
+   4              		.eabi_attribute 20, 1
+   5              		.eabi_attribute 21, 1
+   6              		.eabi_attribute 23, 3
+   7              		.eabi_attribute 24, 1
+   8              		.eabi_attribute 25, 1
+   9              		.eabi_attribute 26, 1
+  10              		.eabi_attribute 30, 1
+  11              		.eabi_attribute 34, 1
+  12              		.eabi_attribute 18, 4
+  13              		.thumb
+  14              		.syntax unified
+  15              		.file	"XPT2046.c"
+  16              		.text
+  17              	.Ltext0:
+  18              		.cfi_sections	.debug_frame
+  19              		.section	.text.XPT2046_ReadPos,"ax",%progbits
+  20              		.align	2
+  21              		.global	XPT2046_ReadPos
+  22              		.thumb
+  23              		.thumb_func
+  24              		.type	XPT2046_ReadPos, %function
+  25              	XPT2046_ReadPos:
+  26              	.LFB65:
+  27              		.file 1 "Touch_Controller\\XPT2046.c"
+   1:Touch_Controller/XPT2046.c **** /*******************************************************************************
+   2:Touch_Controller/XPT2046.c **** * File Name: XPT2046.c
+   3:Touch_Controller/XPT2046.c **** *
+   4:Touch_Controller/XPT2046.c **** * Description:
+   5:Touch_Controller/XPT2046.c **** *  This is a driver for the Touch Screen Controller  XPT2046 
+   6:Touch_Controller/XPT2046.c **** *
+   7:Touch_Controller/XPT2046.c **** *  Data send and get by SPI
+   8:Touch_Controller/XPT2046.c **** *  Read Pos Coordinates X & Y with Basic Calibration
+   9:Touch_Controller/XPT2046.c **** *  Read Z Coordinate in Data Raw for Touch Pressure
+  10:Touch_Controller/XPT2046.c **** ********************************************************************************
+  11:Touch_Controller/XPT2046.c **** * Copyright (c) 2018 Andres F. Navas
+  12:Touch_Controller/XPT2046.c **** *******************************************************************************/
+  13:Touch_Controller/XPT2046.c **** 
+  14:Touch_Controller/XPT2046.c **** #include <project.h>
+  15:Touch_Controller/XPT2046.c **** #include <stdlib.h>
+  16:Touch_Controller/XPT2046.c **** #include "XPT2046.h"
+  17:Touch_Controller/XPT2046.c **** #include "../TFT_Driver/ugui_SSD1963.h"
+  18:Touch_Controller/XPT2046.c **** 
+  19:Touch_Controller/XPT2046.c **** #define DelayCycles         10      // About 400ns period for 63MHz BUS Clock
+  20:Touch_Controller/XPT2046.c **** #define XPT2046_MAX_ADC     0x0fff  // Max ADC Value of 12bits
+  21:Touch_Controller/XPT2046.c **** #define X_Min               120     // Min and Max coordinates in raw values for calibration
+  22:Touch_Controller/XPT2046.c **** #define X_Max               4000
+  23:Touch_Controller/XPT2046.c **** #define Y_Min               200
+  24:Touch_Controller/XPT2046.c **** #define Y_Max               3712
+  25:Touch_Controller/XPT2046.c **** 
+  26:Touch_Controller/XPT2046.c **** //**********************************************************
+  27:Touch_Controller/XPT2046.c **** //******** Send data to XPT2046   Touch Controller *********
+  28:Touch_Controller/XPT2046.c **** //********            SPI Transaction              *********
+  29:Touch_Controller/XPT2046.c **** //**********************************************************
+  30:Touch_Controller/XPT2046.c **** inline void Write_2046(unsigned char Num)          
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqVWbXA.s 			page 2
+
+
+  31:Touch_Controller/XPT2046.c **** {
+  32:Touch_Controller/XPT2046.c ****     unsigned char count = 0;
+  33:Touch_Controller/XPT2046.c ****     T_CLK_Write(0);
+  34:Touch_Controller/XPT2046.c ****     for(count = 0; count < 8; count++)  // Command control 8 bits
+  35:Touch_Controller/XPT2046.c ****     {
+  36:Touch_Controller/XPT2046.c ****         if(Num & 0x80) T_DIN_Write(1);   // Write command from MSB  to LSB        
+  37:Touch_Controller/XPT2046.c ****         else T_DIN_Write(0);
+  38:Touch_Controller/XPT2046.c ****         T_CLK_Write(0);                 // Rising Edge to write
+  39:Touch_Controller/XPT2046.c ****         CyDelayCycles(DelayCycles);
+  40:Touch_Controller/XPT2046.c ****         T_CLK_Write(1);
+  41:Touch_Controller/XPT2046.c ****         CyDelayCycles(DelayCycles);
+  42:Touch_Controller/XPT2046.c ****         Num <<= 1;                      // Shift the register
+  43:Touch_Controller/XPT2046.c ****     }
+  44:Touch_Controller/XPT2046.c **** }
+  45:Touch_Controller/XPT2046.c **** 
+  46:Touch_Controller/XPT2046.c **** //**********************************************************
+  47:Touch_Controller/XPT2046.c **** //******** Get data from XPT2046  Touch Controller *********
+  48:Touch_Controller/XPT2046.c **** //********            SPI Transaction              *********
+  49:Touch_Controller/XPT2046.c **** //**********************************************************
+  50:Touch_Controller/XPT2046.c **** inline uint16 Read_2046()             
+  51:Touch_Controller/XPT2046.c **** {
+  52:Touch_Controller/XPT2046.c **** 	uint8 count = 0;
+  53:Touch_Controller/XPT2046.c **** 	uint16 Num = 0;
+  54:Touch_Controller/XPT2046.c **** 	for(count = 0; count < 12; count++)     // ADC Data read 12 bits
+  55:Touch_Controller/XPT2046.c **** 	{
+  56:Touch_Controller/XPT2046.c **** 		Num <<= 1;		                    // Shift the register
+  57:Touch_Controller/XPT2046.c **** 		T_CLK_Write(1);                     // Falling Edge to read
+  58:Touch_Controller/XPT2046.c ****         CyDelayCycles(DelayCycles);           
+  59:Touch_Controller/XPT2046.c **** 		T_CLK_Write(0);
+  60:Touch_Controller/XPT2046.c ****         CyDelayCycles(DelayCycles);
+  61:Touch_Controller/XPT2046.c **** 		Num |= T_DO_Read();	            // Read the data from MSB to LSB
+  62:Touch_Controller/XPT2046.c **** 	}
+  63:Touch_Controller/XPT2046.c **** 
+  64:Touch_Controller/XPT2046.c **** return(Num);
+  65:Touch_Controller/XPT2046.c **** }	
+  66:Touch_Controller/XPT2046.c **** 
+  67:Touch_Controller/XPT2046.c **** //**********************************************************
+  68:Touch_Controller/XPT2046.c **** //******    Reading the position of the coordinate    ******
+  69:Touch_Controller/XPT2046.c **** //******            Data RAW / 12Bits ADC             ******
+  70:Touch_Controller/XPT2046.c **** //**********************************************************
+  71:Touch_Controller/XPT2046.c **** uint16 XPT2046_ReadPos(uint16 coord)
+  72:Touch_Controller/XPT2046.c **** {
+  28              		.loc 1 72 0
+  29              		.cfi_startproc
+  30              		@ args = 0, pretend = 0, frame = 0
+  31              		@ frame_needed = 0, uses_anonymous_args = 0
+  32              	.LVL0:
+  33 0000 38B5     		push	{r3, r4, r5, lr}
+  34              		.cfi_def_cfa_offset 16
+  35              		.cfi_offset 3, -16
+  36              		.cfi_offset 4, -12
+  37              		.cfi_offset 5, -8
+  38              		.cfi_offset 14, -4
+  39 0002 0446     		mov	r4, r0
+  73:Touch_Controller/XPT2046.c ****     uint16 pos;
+  74:Touch_Controller/XPT2046.c ****     T_CS_Write(0);
+  40              		.loc 1 74 0
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqVWbXA.s 			page 3
+
+
+  41 0004 0020     		movs	r0, #0
+  42              	.LVL1:
+  43 0006 FFF7FEFF 		bl	T_CS_Write
+  44              	.LVL2:
+  75:Touch_Controller/XPT2046.c ****     Write_2046(coord);                    // Send Command     
+  45              		.loc 1 75 0
+  46 000a E4B2     		uxtb	r4, r4
+  47              	.LVL3:
+  48              	.LBB6:
+  49              	.LBB7:
+  33:Touch_Controller/XPT2046.c ****     for(count = 0; count < 8; count++)  // Command control 8 bits
+  50              		.loc 1 33 0
+  51 000c 0020     		movs	r0, #0
+  52 000e FFF7FEFF 		bl	T_CLK_Write
+  53              	.LVL4:
+  34:Touch_Controller/XPT2046.c ****     {
+  54              		.loc 1 34 0
+  55 0012 0025     		movs	r5, #0
+  56 0014 19E0     		b	.L2
+  57              	.LVL5:
+  58              	.L5:
+  36:Touch_Controller/XPT2046.c ****         else T_DIN_Write(0);
+  59              		.loc 1 36 0
+  60 0016 14F0800F 		tst	r4, #128
+  61 001a 03D0     		beq	.L3
+  62 001c 0120     		movs	r0, #1
+  63 001e FFF7FEFF 		bl	T_DIN_Write
+  64              	.LVL6:
+  65 0022 02E0     		b	.L4
+  66              	.L3:
+  37:Touch_Controller/XPT2046.c ****         T_CLK_Write(0);                 // Rising Edge to write
+  67              		.loc 1 37 0
+  68 0024 0020     		movs	r0, #0
+  69 0026 FFF7FEFF 		bl	T_DIN_Write
+  70              	.LVL7:
+  71              	.L4:
+  38:Touch_Controller/XPT2046.c ****         CyDelayCycles(DelayCycles);
+  72              		.loc 1 38 0
+  73 002a 0020     		movs	r0, #0
+  74 002c FFF7FEFF 		bl	T_CLK_Write
+  75              	.LVL8:
+  39:Touch_Controller/XPT2046.c ****         T_CLK_Write(1);
+  76              		.loc 1 39 0
+  77 0030 0A20     		movs	r0, #10
+  78 0032 FFF7FEFF 		bl	CyDelayCycles
+  79              	.LVL9:
+  40:Touch_Controller/XPT2046.c ****         CyDelayCycles(DelayCycles);
+  80              		.loc 1 40 0
+  81 0036 0120     		movs	r0, #1
+  82 0038 FFF7FEFF 		bl	T_CLK_Write
+  83              	.LVL10:
+  41:Touch_Controller/XPT2046.c ****         Num <<= 1;                      // Shift the register
+  84              		.loc 1 41 0
+  85 003c 0A20     		movs	r0, #10
+  86 003e FFF7FEFF 		bl	CyDelayCycles
+  87              	.LVL11:
+  42:Touch_Controller/XPT2046.c ****     }
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqVWbXA.s 			page 4
+
+
+  88              		.loc 1 42 0
+  89 0042 6400     		lsls	r4, r4, #1
+  90              	.LVL12:
+  91 0044 E4B2     		uxtb	r4, r4
+  92              	.LVL13:
+  34:Touch_Controller/XPT2046.c ****     {
+  93              		.loc 1 34 0
+  94 0046 0135     		adds	r5, r5, #1
+  95              	.LVL14:
+  96 0048 EDB2     		uxtb	r5, r5
+  97              	.LVL15:
+  98              	.L2:
+  99 004a 072D     		cmp	r5, #7
+ 100 004c E3D9     		bls	.L5
+ 101              	.LVL16:
+ 102              	.LBE7:
+ 103              	.LBE6:
+  76:Touch_Controller/XPT2046.c ****     T_CLK_Write(1);
+ 104              		.loc 1 76 0
+ 105 004e 0120     		movs	r0, #1
+ 106 0050 FFF7FEFF 		bl	T_CLK_Write
+ 107              	.LVL17:
+  77:Touch_Controller/XPT2046.c ****     CyDelayCycles(DelayCycles);           //Falling Edge to continue
+ 108              		.loc 1 77 0
+ 109 0054 0A20     		movs	r0, #10
+ 110 0056 FFF7FEFF 		bl	CyDelayCycles
+ 111              	.LVL18:
+  78:Touch_Controller/XPT2046.c ****     T_CLK_Write(0);
+ 112              		.loc 1 78 0
+ 113 005a 0020     		movs	r0, #0
+ 114 005c FFF7FEFF 		bl	T_CLK_Write
+ 115              	.LVL19:
+  79:Touch_Controller/XPT2046.c ****     CyDelayCycles(DelayCycles);
+ 116              		.loc 1 79 0
+ 117 0060 0A20     		movs	r0, #10
+ 118 0062 FFF7FEFF 		bl	CyDelayCycles
+ 119              	.LVL20:
+ 120              	.LBB8:
+ 121              	.LBB9:
+  53:Touch_Controller/XPT2046.c **** 	for(count = 0; count < 12; count++)     // ADC Data read 12 bits
+ 122              		.loc 1 53 0
+ 123 0066 0024     		movs	r4, #0
+  54:Touch_Controller/XPT2046.c **** 	{
+ 124              		.loc 1 54 0
+ 125 0068 2546     		mov	r5, r4
+ 126 006a 13E0     		b	.L6
+ 127              	.LVL21:
+ 128              	.L7:
+  56:Touch_Controller/XPT2046.c **** 		T_CLK_Write(1);                     // Falling Edge to read
+ 129              		.loc 1 56 0
+ 130 006c 6400     		lsls	r4, r4, #1
+ 131              	.LVL22:
+ 132 006e A4B2     		uxth	r4, r4
+ 133              	.LVL23:
+  57:Touch_Controller/XPT2046.c ****         CyDelayCycles(DelayCycles);           
+ 134              		.loc 1 57 0
+ 135 0070 0120     		movs	r0, #1
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqVWbXA.s 			page 5
+
+
+ 136 0072 FFF7FEFF 		bl	T_CLK_Write
+ 137              	.LVL24:
+  58:Touch_Controller/XPT2046.c **** 		T_CLK_Write(0);
+ 138              		.loc 1 58 0
+ 139 0076 0A20     		movs	r0, #10
+ 140 0078 FFF7FEFF 		bl	CyDelayCycles
+ 141              	.LVL25:
+  59:Touch_Controller/XPT2046.c ****         CyDelayCycles(DelayCycles);
+ 142              		.loc 1 59 0
+ 143 007c 0020     		movs	r0, #0
+ 144 007e FFF7FEFF 		bl	T_CLK_Write
+ 145              	.LVL26:
+  60:Touch_Controller/XPT2046.c **** 		Num |= T_DO_Read();	            // Read the data from MSB to LSB
+ 146              		.loc 1 60 0
+ 147 0082 0A20     		movs	r0, #10
+ 148 0084 FFF7FEFF 		bl	CyDelayCycles
+ 149              	.LVL27:
+  61:Touch_Controller/XPT2046.c **** 	}
+ 150              		.loc 1 61 0
+ 151 0088 FFF7FEFF 		bl	T_DO_Read
+ 152              	.LVL28:
+ 153 008c 2043     		orrs	r0, r0, r4
+ 154 008e 84B2     		uxth	r4, r0
+ 155              	.LVL29:
+  54:Touch_Controller/XPT2046.c **** 	{
+ 156              		.loc 1 54 0
+ 157 0090 0135     		adds	r5, r5, #1
+ 158              	.LVL30:
+ 159 0092 EDB2     		uxtb	r5, r5
+ 160              	.LVL31:
+ 161              	.L6:
+ 162 0094 0B2D     		cmp	r5, #11
+ 163 0096 E9D9     		bls	.L7
+ 164              	.LVL32:
+ 165              	.LBE9:
+ 166              	.LBE8:
+  80:Touch_Controller/XPT2046.c ****     pos = Read_2046();                    // Read ADC data
+  81:Touch_Controller/XPT2046.c ****     T_CS_Write(1);
+ 167              		.loc 1 81 0
+ 168 0098 0120     		movs	r0, #1
+ 169 009a FFF7FEFF 		bl	T_CS_Write
+ 170              	.LVL33:
+  82:Touch_Controller/XPT2046.c ****     return pos;
+  83:Touch_Controller/XPT2046.c **** }
+ 171              		.loc 1 83 0
+ 172 009e 2046     		mov	r0, r4
+ 173 00a0 38BD     		pop	{r3, r4, r5, pc}
+ 174              		.cfi_endproc
+ 175              	.LFE65:
+ 176              		.size	XPT2046_ReadPos, .-XPT2046_ReadPos
+ 177 00a2 00BF     		.section	.text.XPT2046_Start,"ax",%progbits
+ 178              		.align	2
+ 179              		.global	XPT2046_Start
+ 180              		.thumb
+ 181              		.thumb_func
+ 182              		.type	XPT2046_Start, %function
+ 183              	XPT2046_Start:
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqVWbXA.s 			page 6
+
+
+ 184              	.LFB66:
+  84:Touch_Controller/XPT2046.c **** 
+  85:Touch_Controller/XPT2046.c **** //**********************************************************
+  86:Touch_Controller/XPT2046.c **** //*****************    Start controller   ******************
+  87:Touch_Controller/XPT2046.c **** //*****************  Enable the Touch IRQ ******************
+  88:Touch_Controller/XPT2046.c **** //**********************************************************
+  89:Touch_Controller/XPT2046.c **** void XPT2046_Start(void)
+  90:Touch_Controller/XPT2046.c **** {
+ 185              		.loc 1 90 0
+ 186              		.cfi_startproc
+ 187              		@ args = 0, pretend = 0, frame = 0
+ 188              		@ frame_needed = 0, uses_anonymous_args = 0
+ 189 0000 08B5     		push	{r3, lr}
+ 190              		.cfi_def_cfa_offset 8
+ 191              		.cfi_offset 3, -8
+ 192              		.cfi_offset 14, -4
+  91:Touch_Controller/XPT2046.c ****     XPT2046_ReadPos(0x80);
+ 193              		.loc 1 91 0
+ 194 0002 8020     		movs	r0, #128
+ 195 0004 FFF7FEFF 		bl	XPT2046_ReadPos
+ 196              	.LVL34:
+  92:Touch_Controller/XPT2046.c ****     CyDelay(5);
+ 197              		.loc 1 92 0
+ 198 0008 0520     		movs	r0, #5
+ 199 000a FFF7FEFF 		bl	CyDelay
+ 200              	.LVL35:
+ 201 000e 08BD     		pop	{r3, pc}
+ 202              		.cfi_endproc
+ 203              	.LFE66:
+ 204              		.size	XPT2046_Start, .-XPT2046_Start
+ 205              		.section	.text.XPT2046_ReadXY,"ax",%progbits
+ 206              		.align	2
+ 207              		.global	XPT2046_ReadXY
+ 208              		.thumb
+ 209              		.thumb_func
+ 210              		.type	XPT2046_ReadXY, %function
+ 211              	XPT2046_ReadXY:
+ 212              	.LFB67:
+  93:Touch_Controller/XPT2046.c **** }
+  94:Touch_Controller/XPT2046.c **** 
+  95:Touch_Controller/XPT2046.c **** //**********************************************************
+  96:Touch_Controller/XPT2046.c **** //*****************   Obtain X and Y Pos  ******************
+  97:Touch_Controller/XPT2046.c **** //*****************   Basic  Calibration  ******************
+  98:Touch_Controller/XPT2046.c **** //**********************************************************
+  99:Touch_Controller/XPT2046.c **** uint8 XPT2046_ReadXY(uint16 *X,  uint16 *Y)  // Return 1 if data is valid
+ 100:Touch_Controller/XPT2046.c **** {
+ 213              		.loc 1 100 0
+ 214              		.cfi_startproc
+ 215              		@ args = 0, pretend = 0, frame = 0
+ 216              		@ frame_needed = 0, uses_anonymous_args = 0
+ 217              	.LVL36:
+ 218 0000 2DE9F843 		push	{r3, r4, r5, r6, r7, r8, r9, lr}
+ 219              		.cfi_def_cfa_offset 32
+ 220              		.cfi_offset 3, -32
+ 221              		.cfi_offset 4, -28
+ 222              		.cfi_offset 5, -24
+ 223              		.cfi_offset 6, -20
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqVWbXA.s 			page 7
+
+
+ 224              		.cfi_offset 7, -16
+ 225              		.cfi_offset 8, -12
+ 226              		.cfi_offset 9, -8
+ 227              		.cfi_offset 14, -4
+ 228 0004 8146     		mov	r9, r0
+ 229 0006 8846     		mov	r8, r1
+ 230              	.LVL37:
+ 101:Touch_Controller/XPT2046.c ****     uint16 x0, y0, x1, y1, xav, yav, px, py;
+ 102:Touch_Controller/XPT2046.c ****     uint16 timeout = 0;
+ 231              		.loc 1 102 0
+ 232 0008 0025     		movs	r5, #0
+ 233              	.LVL38:
+ 234              	.L13:
+ 103:Touch_Controller/XPT2046.c ****     
+ 104:Touch_Controller/XPT2046.c ****     do{         
+ 105:Touch_Controller/XPT2046.c ****         XPT2046_ReadPos(0x90);                         
+ 235              		.loc 1 105 0 discriminator 5
+ 236 000a 9020     		movs	r0, #144
+ 237 000c FFF7FEFF 		bl	XPT2046_ReadPos
+ 238              	.LVL39:
+ 106:Touch_Controller/XPT2046.c ****         y0 = XPT2046_ReadPos(0x90);     // read coordinate Y
+ 239              		.loc 1 106 0 discriminator 5
+ 240 0010 9020     		movs	r0, #144
+ 241 0012 FFF7FEFF 		bl	XPT2046_ReadPos
+ 242              	.LVL40:
+ 243 0016 0746     		mov	r7, r0
+ 244              	.LVL41:
+ 107:Touch_Controller/XPT2046.c ****         y1 = XPT2046_ReadPos(0x90);     // again...
+ 245              		.loc 1 107 0 discriminator 5
+ 246 0018 9020     		movs	r0, #144
+ 247 001a FFF7FEFF 		bl	XPT2046_ReadPos
+ 248              	.LVL42:
+ 249 001e 0646     		mov	r6, r0
+ 250              	.LVL43:
+ 108:Touch_Controller/XPT2046.c ****                               
+ 109:Touch_Controller/XPT2046.c ****         XPT2046_ReadPos(0xd0);
+ 251              		.loc 1 109 0 discriminator 5
+ 252 0020 D020     		movs	r0, #208
+ 253 0022 FFF7FEFF 		bl	XPT2046_ReadPos
+ 254              	.LVL44:
+ 110:Touch_Controller/XPT2046.c ****         x0 = XPT2046_ReadPos(0xd0);     // read coordinate X
+ 255              		.loc 1 110 0 discriminator 5
+ 256 0026 D020     		movs	r0, #208
+ 257 0028 FFF7FEFF 		bl	XPT2046_ReadPos
+ 258              	.LVL45:
+ 259 002c 0446     		mov	r4, r0
+ 260              	.LVL46:
+ 111:Touch_Controller/XPT2046.c ****         x1 = XPT2046_ReadPos(0xd0);	    // again...                     
+ 261              		.loc 1 111 0 discriminator 5
+ 262 002e D020     		movs	r0, #208
+ 263 0030 FFF7FEFF 		bl	XPT2046_ReadPos
+ 264              	.LVL47:
+ 112:Touch_Controller/XPT2046.c ****         
+ 113:Touch_Controller/XPT2046.c ****         timeout++;                      // Incr. Time Out
+ 265              		.loc 1 113 0 discriminator 5
+ 266 0034 0135     		adds	r5, r5, #1
+ 267              	.LVL48:
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqVWbXA.s 			page 8
+
+
+ 268 0036 ADB2     		uxth	r5, r5
+ 269              	.LVL49:
+ 114:Touch_Controller/XPT2046.c ****    }while(((abs(x0 - x1) > 50) && (abs(y0 - y1) > 50)) || timeout >= 255);     // Cycle if the erro
+ 270              		.loc 1 114 0 discriminator 5
+ 271 0038 2146     		mov	r1, r4
+ 272 003a 0246     		mov	r2, r0
+ 273 003c 241A     		subs	r4, r4, r0
+ 274              	.LVL50:
+ 275 003e 002C     		cmp	r4, #0
+ 276 0040 B8BF     		it	lt
+ 277 0042 6442     		rsblt	r4, r4, #0
+ 278 0044 322C     		cmp	r4, #50
+ 279 0046 05DD     		ble	.L12
+ 280              		.loc 1 114 0 is_stmt 0 discriminator 1
+ 281 0048 BB1B     		subs	r3, r7, r6
+ 282 004a 002B     		cmp	r3, #0
+ 283 004c B8BF     		it	lt
+ 284 004e 5B42     		rsblt	r3, r3, #0
+ 285 0050 322B     		cmp	r3, #50
+ 286 0052 DADC     		bgt	.L13
+ 287              	.L12:
+ 288              		.loc 1 114 0 discriminator 4
+ 289 0054 FE2D     		cmp	r5, #254
+ 290 0056 D8D8     		bhi	.L13
+ 115:Touch_Controller/XPT2046.c **** 
+ 116:Touch_Controller/XPT2046.c ****     if(timeout < 255)       // Cycle ends with good data
+ 291              		.loc 1 116 0 is_stmt 1
+ 292 0058 36D8     		bhi	.L17
+ 117:Touch_Controller/XPT2046.c ****     { 
+ 118:Touch_Controller/XPT2046.c ****         // Update the current coordinate values
+ 119:Touch_Controller/XPT2046.c ****         xav  = (x0 + x1)/2;                                     // Data raw Average for X and Y
+ 293              		.loc 1 119 0
+ 294 005a 0A44     		add	r2, r2, r1
+ 295 005c 02EBD272 		add	r2, r2, r2, lsr #31
+ 296              	.LVL51:
+ 120:Touch_Controller/XPT2046.c ****         yav  = XPT2046_MAX_ADC - ((y0 + y1)/2);                 // Normalization of touchpad to ach
+ 297              		.loc 1 120 0
+ 298 0060 3E44     		add	r6, r6, r7
+ 299              	.LVL52:
+ 300 0062 06EBD676 		add	r6, r6, r6, lsr #31
+ 301 0066 40F6FF73 		movw	r3, #4095
+ 302 006a A3EB6606 		sub	r6, r3, r6, asr #1
+ 303 006e B6B2     		uxth	r6, r6
+ 304              	.LVL53:
+ 121:Touch_Controller/XPT2046.c ****         px = ((xav - X_Min) * DISPLAY_WIDTH) / (X_Max - X_Min); // Calibration for LCD Panel Size; 
+ 305              		.loc 1 121 0
+ 306 0070 C2F34F03 		ubfx	r3, r2, #1, #16
+ 307 0074 783B     		subs	r3, r3, #120
+ 308 0076 4FF44872 		mov	r2, #800
+ 309              	.LVL54:
+ 310 007a 02FB03F3 		mul	r3, r2, r3
+ 311 007e 144A     		ldr	r2, .L21
+ 312 0080 82FB0312 		smull	r1, r2, r2, r3
+ 313              	.LVL55:
+ 314 0084 1A44     		add	r2, r2, r3
+ 315 0086 DB17     		asrs	r3, r3, #31
+ 316 0088 C3EBE223 		rsb	r3, r3, r2, asr #11
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqVWbXA.s 			page 9
+
+
+ 317 008c 9BB2     		uxth	r3, r3
+ 318              	.LVL56:
+ 122:Touch_Controller/XPT2046.c ****         if(px <= 0) px = 0;
+ 123:Touch_Controller/XPT2046.c ****         if(px >= DISPLAY_WIDTH) px = DISPLAY_WIDTH;
+ 319              		.loc 1 123 0
+ 320 008e B3F5487F 		cmp	r3, #800
+ 321 0092 01D3     		bcc	.L15
+ 322 0094 4FF44873 		mov	r3, #800
+ 323              	.LVL57:
+ 324              	.L15:
+ 124:Touch_Controller/XPT2046.c ****         py = ((yav - Y_Min) * DISPLAY_HEIGHT) / (Y_Max - Y_Min);
+ 325              		.loc 1 124 0
+ 326 0098 A6F1C802 		sub	r2, r6, #200
+ 327 009c C2EB0212 		rsb	r2, r2, r2, lsl #4
+ 328 00a0 5101     		lsls	r1, r2, #5
+ 329 00a2 0C4A     		ldr	r2, .L21+4
+ 330 00a4 82FB0102 		smull	r0, r2, r2, r1
+ 331              	.LVL58:
+ 332 00a8 C917     		asrs	r1, r1, #31
+ 333 00aa C1EB2222 		rsb	r2, r1, r2, asr #8
+ 334 00ae 92B2     		uxth	r2, r2
+ 335              	.LVL59:
+ 125:Touch_Controller/XPT2046.c ****         if(py <= 0) py = 0;
+ 126:Touch_Controller/XPT2046.c ****         if(py >= DISPLAY_HEIGHT) py = DISPLAY_HEIGHT;
+ 336              		.loc 1 126 0
+ 337 00b0 B2F5F07F 		cmp	r2, #480
+ 338 00b4 01D3     		bcc	.L16
+ 339 00b6 4FF4F072 		mov	r2, #480
+ 340              	.LVL60:
+ 341              	.L16:
+ 127:Touch_Controller/XPT2046.c ****         *X = px;
+ 342              		.loc 1 127 0
+ 343 00ba A9F80030 		strh	r3, [r9]	@ movhi
+ 128:Touch_Controller/XPT2046.c ****         *Y = py;
+ 344              		.loc 1 128 0
+ 345 00be A8F80020 		strh	r2, [r8]	@ movhi
+ 129:Touch_Controller/XPT2046.c ****         return(1);      // Data Valid
+ 346              		.loc 1 129 0
+ 347 00c2 0120     		movs	r0, #1
+ 348 00c4 BDE8F883 		pop	{r3, r4, r5, r6, r7, r8, r9, pc}
+ 349              	.LVL61:
+ 350              	.L17:
+ 130:Touch_Controller/XPT2046.c ****     }
+ 131:Touch_Controller/XPT2046.c ****     else
+ 132:Touch_Controller/XPT2046.c ****     {
+ 133:Touch_Controller/XPT2046.c ****         return(0);      // Data not valid
+ 351              		.loc 1 133 0
+ 352 00c8 0020     		movs	r0, #0
+ 353              	.LVL62:
+ 134:Touch_Controller/XPT2046.c ****     }
+ 135:Touch_Controller/XPT2046.c **** }
+ 354              		.loc 1 135 0
+ 355 00ca BDE8F883 		pop	{r3, r4, r5, r6, r7, r8, r9, pc}
+ 356              	.LVL63:
+ 357              	.L22:
+ 358 00ce 00BF     		.align	2
+ 359              	.L21:
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqVWbXA.s 			page 10
+
+
+ 360 00d0 AD322087 		.word	-2027933011
+ 361 00d4 931CA912 		.word	313072787
+ 362              		.cfi_endproc
+ 363              	.LFE67:
+ 364              		.size	XPT2046_ReadXY, .-XPT2046_ReadXY
+ 365              		.section	.text.XPT2046_ReadZ,"ax",%progbits
+ 366              		.align	2
+ 367              		.global	XPT2046_ReadZ
+ 368              		.thumb
+ 369              		.thumb_func
+ 370              		.type	XPT2046_ReadZ, %function
+ 371              	XPT2046_ReadZ:
+ 372              	.LFB68:
+ 136:Touch_Controller/XPT2046.c **** 
+ 137:Touch_Controller/XPT2046.c **** //**********************************************************
+ 138:Touch_Controller/XPT2046.c **** //**************    Obtain Z Coordinate    *****************
+ 139:Touch_Controller/XPT2046.c **** //**************  Touch Pressure RAW Data  *****************
+ 140:Touch_Controller/XPT2046.c **** //**********************************************************
+ 141:Touch_Controller/XPT2046.c **** uint16 XPT2046_ReadZ(void)
+ 142:Touch_Controller/XPT2046.c **** {
+ 373              		.loc 1 142 0
+ 374              		.cfi_startproc
+ 375              		@ args = 0, pretend = 0, frame = 0
+ 376              		@ frame_needed = 0, uses_anonymous_args = 0
+ 377 0000 10B5     		push	{r4, lr}
+ 378              		.cfi_def_cfa_offset 8
+ 379              		.cfi_offset 4, -8
+ 380              		.cfi_offset 14, -4
+ 143:Touch_Controller/XPT2046.c ****     return(XPT2046_ReadPos(0xc0) - XPT2046_ReadPos(0xb0));      // Z Data Raw is inverse, so 4095 i
+ 381              		.loc 1 143 0
+ 382 0002 C020     		movs	r0, #192
+ 383 0004 FFF7FEFF 		bl	XPT2046_ReadPos
+ 384              	.LVL64:
+ 385 0008 0446     		mov	r4, r0
+ 386 000a B020     		movs	r0, #176
+ 387 000c FFF7FEFF 		bl	XPT2046_ReadPos
+ 388              	.LVL65:
+ 389 0010 201A     		subs	r0, r4, r0
+ 144:Touch_Controller/XPT2046.c **** }
+ 390              		.loc 1 144 0
+ 391 0012 80B2     		uxth	r0, r0
+ 392 0014 10BD     		pop	{r4, pc}
+ 393              		.cfi_endproc
+ 394              	.LFE68:
+ 395              		.size	XPT2046_ReadZ, .-XPT2046_ReadZ
+ 396              		.comm	gui1963,108,4
+ 397              		.comm	PosY,2,2
+ 398              		.comm	PosX,2,2
+ 399 0016 00BF     		.text
+ 400              	.Letext0:
+ 401              		.file 2 "c:\\program files (x86)\\cypress\\psoc creator\\4.2\\psoc creator\\import\\gnu\\arm\\5.4.
+ 402              		.file 3 "c:\\program files (x86)\\cypress\\psoc creator\\4.2\\psoc creator\\import\\gnu\\arm\\5.4.
+ 403              		.file 4 "Generated_Source\\PSoC5/cytypes.h"
+ 404              		.file 5 "Touch_Controller\\../TFT_Driver/../uGUI_Library/ugui_config.h"
+ 405              		.file 6 "Touch_Controller\\../TFT_Driver/../uGUI_Library/ugui.h"
+ 406              		.file 7 "Generated_Source\\PSoC5/core_cm3.h"
+ 407              		.file 8 "Touch_Controller\\XPT2046.h"
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqVWbXA.s 			page 11
+
+
+ 408              		.file 9 "Touch_Controller\\../TFT_Driver/ugui_SSD1963.h"
+ 409              		.file 10 "Generated_Source\\PSoC5/T_CLK.h"
+ 410              		.file 11 "Generated_Source\\PSoC5/T_DIN.h"
+ 411              		.file 12 "Generated_Source\\PSoC5/CyLib.h"
+ 412              		.file 13 "Generated_Source\\PSoC5/T_DO.h"
+ 413              		.file 14 "Generated_Source\\PSoC5/T_CS.h"
+ 414              		.section	.debug_info,"",%progbits
+ 415              	.Ldebug_info0:
+ 416 0000 BB0A0000 		.4byte	0xabb
+ 417 0004 0400     		.2byte	0x4
+ 418 0006 00000000 		.4byte	.Ldebug_abbrev0
+ 419 000a 04       		.byte	0x4
+ 420 000b 01       		.uleb128 0x1
+ 421 000c 7D010000 		.4byte	.LASF107
+ 422 0010 0C       		.byte	0xc
+ 423 0011 25000000 		.4byte	.LASF108
+ 424 0015 9B030000 		.4byte	.LASF109
+ 425 0019 00000000 		.4byte	.Ldebug_ranges0+0
+ 426 001d 00000000 		.4byte	0
+ 427 0021 00000000 		.4byte	.Ldebug_line0
+ 428 0025 02       		.uleb128 0x2
+ 429 0026 09030000 		.4byte	.LASF0
+ 430 002a 02       		.byte	0x2
+ 431 002b 1B       		.byte	0x1b
+ 432 002c 30000000 		.4byte	0x30
+ 433 0030 03       		.uleb128 0x3
+ 434 0031 01       		.byte	0x1
+ 435 0032 06       		.byte	0x6
+ 436 0033 87040000 		.4byte	.LASF2
+ 437 0037 02       		.uleb128 0x2
+ 438 0038 F3030000 		.4byte	.LASF1
+ 439 003c 02       		.byte	0x2
+ 440 003d 1D       		.byte	0x1d
+ 441 003e 42000000 		.4byte	0x42
+ 442 0042 03       		.uleb128 0x3
+ 443 0043 01       		.byte	0x1
+ 444 0044 08       		.byte	0x8
+ 445 0045 41040000 		.4byte	.LASF3
+ 446 0049 02       		.uleb128 0x2
+ 447 004a C7020000 		.4byte	.LASF4
+ 448 004e 02       		.byte	0x2
+ 449 004f 29       		.byte	0x29
+ 450 0050 54000000 		.4byte	0x54
+ 451 0054 03       		.uleb128 0x3
+ 452 0055 02       		.byte	0x2
+ 453 0056 05       		.byte	0x5
+ 454 0057 63030000 		.4byte	.LASF5
+ 455 005b 02       		.uleb128 0x2
+ 456 005c 35010000 		.4byte	.LASF6
+ 457 0060 02       		.byte	0x2
+ 458 0061 2B       		.byte	0x2b
+ 459 0062 66000000 		.4byte	0x66
+ 460 0066 03       		.uleb128 0x3
+ 461 0067 02       		.byte	0x2
+ 462 0068 07       		.byte	0x7
+ 463 0069 93040000 		.4byte	.LASF7
+ 464 006d 02       		.uleb128 0x2
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqVWbXA.s 			page 12
+
+
+ 465 006e 95000000 		.4byte	.LASF8
+ 466 0072 02       		.byte	0x2
+ 467 0073 3F       		.byte	0x3f
+ 468 0074 78000000 		.4byte	0x78
+ 469 0078 03       		.uleb128 0x3
+ 470 0079 04       		.byte	0x4
+ 471 007a 05       		.byte	0x5
+ 472 007b 6D030000 		.4byte	.LASF9
+ 473 007f 03       		.uleb128 0x3
+ 474 0080 04       		.byte	0x4
+ 475 0081 07       		.byte	0x7
+ 476 0082 17040000 		.4byte	.LASF10
+ 477 0086 03       		.uleb128 0x3
+ 478 0087 08       		.byte	0x8
+ 479 0088 05       		.byte	0x5
+ 480 0089 B9020000 		.4byte	.LASF11
+ 481 008d 03       		.uleb128 0x3
+ 482 008e 08       		.byte	0x8
+ 483 008f 07       		.byte	0x7
+ 484 0090 1E010000 		.4byte	.LASF12
+ 485 0094 04       		.uleb128 0x4
+ 486 0095 04       		.byte	0x4
+ 487 0096 05       		.byte	0x5
+ 488 0097 696E7400 		.ascii	"int\000"
+ 489 009b 03       		.uleb128 0x3
+ 490 009c 04       		.byte	0x4
+ 491 009d 07       		.byte	0x7
+ 492 009e 6B000000 		.4byte	.LASF13
+ 493 00a2 02       		.uleb128 0x2
+ 494 00a3 E0000000 		.4byte	.LASF14
+ 495 00a7 03       		.byte	0x3
+ 496 00a8 14       		.byte	0x14
+ 497 00a9 25000000 		.4byte	0x25
+ 498 00ad 02       		.uleb128 0x2
+ 499 00ae 98020000 		.4byte	.LASF15
+ 500 00b2 03       		.byte	0x3
+ 501 00b3 18       		.byte	0x18
+ 502 00b4 37000000 		.4byte	0x37
+ 503 00b8 02       		.uleb128 0x2
+ 504 00b9 16010000 		.4byte	.LASF16
+ 505 00bd 03       		.byte	0x3
+ 506 00be 20       		.byte	0x20
+ 507 00bf 49000000 		.4byte	0x49
+ 508 00c3 02       		.uleb128 0x2
+ 509 00c4 25030000 		.4byte	.LASF17
+ 510 00c8 03       		.byte	0x3
+ 511 00c9 24       		.byte	0x24
+ 512 00ca 5B000000 		.4byte	0x5b
+ 513 00ce 02       		.uleb128 0x2
+ 514 00cf 29040000 		.4byte	.LASF18
+ 515 00d3 03       		.byte	0x3
+ 516 00d4 2C       		.byte	0x2c
+ 517 00d5 6D000000 		.4byte	0x6d
+ 518 00d9 05       		.uleb128 0x5
+ 519 00da A6040000 		.4byte	.LASF19
+ 520 00de 04       		.byte	0x4
+ 521 00df E401     		.2byte	0x1e4
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqVWbXA.s 			page 13
+
+
+ 522 00e1 42000000 		.4byte	0x42
+ 523 00e5 05       		.uleb128 0x5
+ 524 00e6 7E020000 		.4byte	.LASF20
+ 525 00ea 04       		.byte	0x4
+ 526 00eb E501     		.2byte	0x1e5
+ 527 00ed 66000000 		.4byte	0x66
+ 528 00f1 03       		.uleb128 0x3
+ 529 00f2 04       		.byte	0x4
+ 530 00f3 04       		.byte	0x4
+ 531 00f4 ED000000 		.4byte	.LASF21
+ 532 00f8 03       		.uleb128 0x3
+ 533 00f9 08       		.byte	0x8
+ 534 00fa 04       		.byte	0x4
+ 535 00fb AC040000 		.4byte	.LASF22
+ 536 00ff 03       		.uleb128 0x3
+ 537 0100 01       		.byte	0x1
+ 538 0101 08       		.byte	0x8
+ 539 0102 4E020000 		.4byte	.LASF23
+ 540 0106 03       		.uleb128 0x3
+ 541 0107 08       		.byte	0x8
+ 542 0108 04       		.byte	0x4
+ 543 0109 19030000 		.4byte	.LASF24
+ 544 010d 03       		.uleb128 0x3
+ 545 010e 04       		.byte	0x4
+ 546 010f 07       		.byte	0x7
+ 547 0110 0E040000 		.4byte	.LASF25
+ 548 0114 06       		.uleb128 0x6
+ 549 0115 04       		.byte	0x4
+ 550 0116 07       		.uleb128 0x7
+ 551 0117 04       		.byte	0x4
+ 552 0118 FF000000 		.4byte	0xff
+ 553 011c 07       		.uleb128 0x7
+ 554 011d 04       		.byte	0x4
+ 555 011e 42000000 		.4byte	0x42
+ 556 0122 02       		.uleb128 0x2
+ 557 0123 03030000 		.4byte	.LASF26
+ 558 0127 05       		.byte	0x5
+ 559 0128 27       		.byte	0x27
+ 560 0129 AD000000 		.4byte	0xad
+ 561 012d 02       		.uleb128 0x2
+ 562 012e AD020000 		.4byte	.LASF27
+ 563 0132 05       		.byte	0x5
+ 564 0133 28       		.byte	0x28
+ 565 0134 A2000000 		.4byte	0xa2
+ 566 0138 02       		.uleb128 0x2
+ 567 0139 64000000 		.4byte	.LASF28
+ 568 013d 05       		.byte	0x5
+ 569 013e 29       		.byte	0x29
+ 570 013f C3000000 		.4byte	0xc3
+ 571 0143 02       		.uleb128 0x2
+ 572 0144 55010000 		.4byte	.LASF29
+ 573 0148 05       		.byte	0x5
+ 574 0149 2A       		.byte	0x2a
+ 575 014a B8000000 		.4byte	0xb8
+ 576 014e 08       		.uleb128 0x8
+ 577 014f 01       		.byte	0x1
+ 578 0150 42000000 		.4byte	0x42
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqVWbXA.s 			page 14
+
+
+ 579 0154 06       		.byte	0x6
+ 580 0155 1F       		.byte	0x1f
+ 581 0156 67010000 		.4byte	0x167
+ 582 015a 09       		.uleb128 0x9
+ 583 015b C8040000 		.4byte	.LASF30
+ 584 015f 00       		.byte	0
+ 585 0160 09       		.uleb128 0x9
+ 586 0161 08000000 		.4byte	.LASF31
+ 587 0165 01       		.byte	0x1
+ 588 0166 00       		.byte	0
+ 589 0167 02       		.uleb128 0x2
+ 590 0168 BD000000 		.4byte	.LASF32
+ 591 016c 06       		.byte	0x6
+ 592 016d 22       		.byte	0x22
+ 593 016e 4E010000 		.4byte	0x14e
+ 594 0172 0A       		.uleb128 0xa
+ 595 0173 14       		.byte	0x14
+ 596 0174 06       		.byte	0x6
+ 597 0175 24       		.byte	0x24
+ 598 0176 CD010000 		.4byte	0x1cd
+ 599 017a 0B       		.uleb128 0xb
+ 600 017b 7000     		.ascii	"p\000"
+ 601 017d 06       		.byte	0x6
+ 602 017e 26       		.byte	0x26
+ 603 017f 1C010000 		.4byte	0x11c
+ 604 0183 00       		.byte	0
+ 605 0184 0C       		.uleb128 0xc
+ 606 0185 61020000 		.4byte	.LASF33
+ 607 0189 06       		.byte	0x6
+ 608 018a 27       		.byte	0x27
+ 609 018b 67010000 		.4byte	0x167
+ 610 018f 04       		.byte	0x4
+ 611 0190 0C       		.uleb128 0xc
+ 612 0191 1E020000 		.4byte	.LASF34
+ 613 0195 06       		.byte	0x6
+ 614 0196 28       		.byte	0x28
+ 615 0197 43010000 		.4byte	0x143
+ 616 019b 06       		.byte	0x6
+ 617 019c 0C       		.uleb128 0xc
+ 618 019d 57030000 		.4byte	.LASF35
+ 619 01a1 06       		.byte	0x6
+ 620 01a2 29       		.byte	0x29
+ 621 01a3 43010000 		.4byte	0x143
+ 622 01a7 08       		.byte	0x8
+ 623 01a8 0C       		.uleb128 0xc
+ 624 01a9 EE020000 		.4byte	.LASF36
+ 625 01ad 06       		.byte	0x6
+ 626 01ae 2A       		.byte	0x2a
+ 627 01af 38010000 		.4byte	0x138
+ 628 01b3 0A       		.byte	0xa
+ 629 01b4 0C       		.uleb128 0xc
+ 630 01b5 E2030000 		.4byte	.LASF37
+ 631 01b9 06       		.byte	0x6
+ 632 01ba 2B       		.byte	0x2b
+ 633 01bb 38010000 		.4byte	0x138
+ 634 01bf 0C       		.byte	0xc
+ 635 01c0 0C       		.uleb128 0xc
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqVWbXA.s 			page 15
+
+
+ 636 01c1 12030000 		.4byte	.LASF38
+ 637 01c5 06       		.byte	0x6
+ 638 01c6 2C       		.byte	0x2c
+ 639 01c7 CD010000 		.4byte	0x1cd
+ 640 01cb 10       		.byte	0x10
+ 641 01cc 00       		.byte	0
+ 642 01cd 07       		.uleb128 0x7
+ 643 01ce 04       		.byte	0x4
+ 644 01cf 22010000 		.4byte	0x122
+ 645 01d3 02       		.uleb128 0x2
+ 646 01d4 EB030000 		.4byte	.LASF39
+ 647 01d8 06       		.byte	0x6
+ 648 01d9 2D       		.byte	0x2d
+ 649 01da 72010000 		.4byte	0x172
+ 650 01de 02       		.uleb128 0x2
+ 651 01df D1020000 		.4byte	.LASF40
+ 652 01e3 06       		.byte	0x6
+ 653 01e4 66       		.byte	0x66
+ 654 01e5 E9010000 		.4byte	0x1e9
+ 655 01e9 0D       		.uleb128 0xd
+ 656 01ea B3040000 		.4byte	.LASF50
+ 657 01ee 20       		.byte	0x20
+ 658 01ef 06       		.byte	0x6
+ 659 01f0 F7       		.byte	0xf7
+ 660 01f1 63020000 		.4byte	0x263
+ 661 01f5 0C       		.uleb128 0xc
+ 662 01f6 6B040000 		.4byte	.LASF41
+ 663 01fa 06       		.byte	0x6
+ 664 01fb F9       		.byte	0xf9
+ 665 01fc 22010000 		.4byte	0x122
+ 666 0200 00       		.byte	0
+ 667 0201 0C       		.uleb128 0xc
+ 668 0202 4F000000 		.4byte	.LASF42
+ 669 0206 06       		.byte	0x6
+ 670 0207 FA       		.byte	0xfa
+ 671 0208 22010000 		.4byte	0x122
+ 672 020c 01       		.byte	0x1
+ 673 020d 0C       		.uleb128 0xc
+ 674 020e B0000000 		.4byte	.LASF43
+ 675 0212 06       		.byte	0x6
+ 676 0213 FB       		.byte	0xfb
+ 677 0214 08040000 		.4byte	0x408
+ 678 0218 04       		.byte	0x4
+ 679 0219 0C       		.uleb128 0xc
+ 680 021a C2040000 		.4byte	.LASF44
+ 681 021e 06       		.byte	0x6
+ 682 021f FC       		.byte	0xfc
+ 683 0220 51030000 		.4byte	0x351
+ 684 0224 08       		.byte	0x8
+ 685 0225 0C       		.uleb128 0xc
+ 686 0226 78040000 		.4byte	.LASF45
+ 687 022a 06       		.byte	0x6
+ 688 022b FD       		.byte	0xfd
+ 689 022c 51030000 		.4byte	0x351
+ 690 0230 10       		.byte	0x10
+ 691 0231 0C       		.uleb128 0xc
+ 692 0232 3C040000 		.4byte	.LASF46
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqVWbXA.s 			page 16
+
+
+ 693 0236 06       		.byte	0x6
+ 694 0237 FE       		.byte	0xfe
+ 695 0238 22010000 		.4byte	0x122
+ 696 023c 18       		.byte	0x18
+ 697 023d 0B       		.uleb128 0xb
+ 698 023e 696400   		.ascii	"id\000"
+ 699 0241 06       		.byte	0x6
+ 700 0242 FF       		.byte	0xff
+ 701 0243 22010000 		.4byte	0x122
+ 702 0247 19       		.byte	0x19
+ 703 0248 0E       		.uleb128 0xe
+ 704 0249 F3000000 		.4byte	.LASF47
+ 705 024d 06       		.byte	0x6
+ 706 024e 0001     		.2byte	0x100
+ 707 0250 22010000 		.4byte	0x122
+ 708 0254 1A       		.byte	0x1a
+ 709 0255 0E       		.uleb128 0xe
+ 710 0256 85020000 		.4byte	.LASF48
+ 711 025a 06       		.byte	0x6
+ 712 025b 0101     		.2byte	0x101
+ 713 025d 14010000 		.4byte	0x114
+ 714 0261 1C       		.byte	0x1c
+ 715 0262 00       		.byte	0
+ 716 0263 02       		.uleb128 0x2
+ 717 0264 76030000 		.4byte	.LASF49
+ 718 0268 06       		.byte	0x6
+ 719 0269 67       		.byte	0x67
+ 720 026a 6E020000 		.4byte	0x26e
+ 721 026e 0F       		.uleb128 0xf
+ 722 026f A7000000 		.4byte	.LASF51
+ 723 0273 34       		.byte	0x34
+ 724 0274 06       		.byte	0x6
+ 725 0275 4101     		.2byte	0x141
+ 726 0277 11030000 		.4byte	0x311
+ 727 027b 0E       		.uleb128 0xe
+ 728 027c 4E010000 		.4byte	.LASF52
+ 729 0280 06       		.byte	0x6
+ 730 0281 4301     		.2byte	0x143
+ 731 0283 22010000 		.4byte	0x122
+ 732 0287 00       		.byte	0
+ 733 0288 0E       		.uleb128 0xe
+ 734 0289 C7000000 		.4byte	.LASF53
+ 735 028d 06       		.byte	0x6
+ 736 028e 4401     		.2byte	0x144
+ 737 0290 02040000 		.4byte	0x402
+ 738 0294 04       		.byte	0x4
+ 739 0295 0E       		.uleb128 0xe
+ 740 0296 6B040000 		.4byte	.LASF41
+ 741 029a 06       		.byte	0x6
+ 742 029b 4501     		.2byte	0x145
+ 743 029d 22010000 		.4byte	0x122
+ 744 02a1 08       		.byte	0x8
+ 745 02a2 10       		.uleb128 0x10
+ 746 02a3 666300   		.ascii	"fc\000"
+ 747 02a6 06       		.byte	0x6
+ 748 02a7 4601     		.2byte	0x146
+ 749 02a9 11030000 		.4byte	0x311
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqVWbXA.s 			page 17
+
+
+ 750 02ad 0A       		.byte	0xa
+ 751 02ae 10       		.uleb128 0x10
+ 752 02af 626300   		.ascii	"bc\000"
+ 753 02b2 06       		.byte	0x6
+ 754 02b3 4701     		.2byte	0x147
+ 755 02b5 11030000 		.4byte	0x311
+ 756 02b9 0C       		.byte	0xc
+ 757 02ba 10       		.uleb128 0x10
+ 758 02bb 787300   		.ascii	"xs\000"
+ 759 02be 06       		.byte	0x6
+ 760 02bf 4801     		.2byte	0x148
+ 761 02c1 43010000 		.4byte	0x143
+ 762 02c5 0E       		.byte	0xe
+ 763 02c6 10       		.uleb128 0x10
+ 764 02c7 797300   		.ascii	"ys\000"
+ 765 02ca 06       		.byte	0x6
+ 766 02cb 4901     		.2byte	0x149
+ 767 02cd 43010000 		.4byte	0x143
+ 768 02d1 10       		.byte	0x10
+ 769 02d2 10       		.uleb128 0x10
+ 770 02d3 786500   		.ascii	"xe\000"
+ 771 02d6 06       		.byte	0x6
+ 772 02d7 4A01     		.2byte	0x14a
+ 773 02d9 43010000 		.4byte	0x143
+ 774 02dd 12       		.byte	0x12
+ 775 02de 10       		.uleb128 0x10
+ 776 02df 796500   		.ascii	"ye\000"
+ 777 02e2 06       		.byte	0x6
+ 778 02e3 4B01     		.2byte	0x14b
+ 779 02e5 43010000 		.4byte	0x143
+ 780 02e9 14       		.byte	0x14
+ 781 02ea 0E       		.uleb128 0xe
+ 782 02eb 65040000 		.4byte	.LASF54
+ 783 02ef 06       		.byte	0x6
+ 784 02f0 4C01     		.2byte	0x14c
+ 785 02f2 22010000 		.4byte	0x122
+ 786 02f6 16       		.byte	0x16
+ 787 02f7 0E       		.uleb128 0xe
+ 788 02f8 DA000000 		.4byte	.LASF55
+ 789 02fc 06       		.byte	0x6
+ 790 02fd 4D01     		.2byte	0x14d
+ 791 02ff 98040000 		.4byte	0x498
+ 792 0303 18       		.byte	0x18
+ 793 0304 10       		.uleb128 0x10
+ 794 0305 636200   		.ascii	"cb\000"
+ 795 0308 06       		.byte	0x6
+ 796 0309 4E01     		.2byte	0x14e
+ 797 030b B5040000 		.4byte	0x4b5
+ 798 030f 30       		.byte	0x30
+ 799 0310 00       		.byte	0
+ 800 0311 02       		.uleb128 0x2
+ 801 0312 5B000000 		.4byte	.LASF56
+ 802 0316 06       		.byte	0x6
+ 803 0317 6D       		.byte	0x6d
+ 804 0318 38010000 		.4byte	0x138
+ 805 031c 0A       		.uleb128 0xa
+ 806 031d 08       		.byte	0x8
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqVWbXA.s 			page 18
+
+
+ 807 031e 06       		.byte	0x6
+ 808 031f A7       		.byte	0xa7
+ 809 0320 51030000 		.4byte	0x351
+ 810 0324 0B       		.uleb128 0xb
+ 811 0325 787300   		.ascii	"xs\000"
+ 812 0328 06       		.byte	0x6
+ 813 0329 A9       		.byte	0xa9
+ 814 032a 43010000 		.4byte	0x143
+ 815 032e 00       		.byte	0
+ 816 032f 0B       		.uleb128 0xb
+ 817 0330 797300   		.ascii	"ys\000"
+ 818 0333 06       		.byte	0x6
+ 819 0334 AA       		.byte	0xaa
+ 820 0335 43010000 		.4byte	0x143
+ 821 0339 02       		.byte	0x2
+ 822 033a 0B       		.uleb128 0xb
+ 823 033b 786500   		.ascii	"xe\000"
+ 824 033e 06       		.byte	0x6
+ 825 033f AB       		.byte	0xab
+ 826 0340 43010000 		.4byte	0x143
+ 827 0344 04       		.byte	0x4
+ 828 0345 0B       		.uleb128 0xb
+ 829 0346 796500   		.ascii	"ye\000"
+ 830 0349 06       		.byte	0x6
+ 831 034a AC       		.byte	0xac
+ 832 034b 43010000 		.4byte	0x143
+ 833 034f 06       		.byte	0x6
+ 834 0350 00       		.byte	0
+ 835 0351 02       		.uleb128 0x2
+ 836 0352 6B020000 		.4byte	.LASF57
+ 837 0356 06       		.byte	0x6
+ 838 0357 AD       		.byte	0xad
+ 839 0358 1C030000 		.4byte	0x31c
+ 840 035c 07       		.uleb128 0x7
+ 841 035d 04       		.byte	0x4
+ 842 035e 62030000 		.4byte	0x362
+ 843 0362 11       		.uleb128 0x11
+ 844 0363 D3010000 		.4byte	0x1d3
+ 845 0367 0A       		.uleb128 0xa
+ 846 0368 08       		.byte	0x8
+ 847 0369 06       		.byte	0x6
+ 848 036a D6       		.byte	0xd6
+ 849 036b AB030000 		.4byte	0x3ab
+ 850 036f 0C       		.uleb128 0xc
+ 851 0370 3C040000 		.4byte	.LASF46
+ 852 0374 06       		.byte	0x6
+ 853 0375 D8       		.byte	0xd8
+ 854 0376 22010000 		.4byte	0x122
+ 855 037a 00       		.byte	0
+ 856 037b 0B       		.uleb128 0xb
+ 857 037c 696400   		.ascii	"id\000"
+ 858 037f 06       		.byte	0x6
+ 859 0380 D9       		.byte	0xd9
+ 860 0381 22010000 		.4byte	0x122
+ 861 0385 01       		.byte	0x1
+ 862 0386 0C       		.uleb128 0xc
+ 863 0387 E0020000 		.4byte	.LASF58
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqVWbXA.s 			page 19
+
+
+ 864 038b 06       		.byte	0x6
+ 865 038c DA       		.byte	0xda
+ 866 038d 22010000 		.4byte	0x122
+ 867 0391 02       		.byte	0x2
+ 868 0392 0C       		.uleb128 0xc
+ 869 0393 F3000000 		.4byte	.LASF47
+ 870 0397 06       		.byte	0x6
+ 871 0398 DB       		.byte	0xdb
+ 872 0399 22010000 		.4byte	0x122
+ 873 039d 03       		.byte	0x3
+ 874 039e 0B       		.uleb128 0xb
+ 875 039f 73726300 		.ascii	"src\000"
+ 876 03a3 06       		.byte	0x6
+ 877 03a4 DC       		.byte	0xdc
+ 878 03a5 14010000 		.4byte	0x114
+ 879 03a9 04       		.byte	0x4
+ 880 03aa 00       		.byte	0
+ 881 03ab 02       		.uleb128 0x2
+ 882 03ac 73020000 		.4byte	.LASF59
+ 883 03b0 06       		.byte	0x6
+ 884 03b1 DD       		.byte	0xdd
+ 885 03b2 67030000 		.4byte	0x367
+ 886 03b6 0A       		.uleb128 0xa
+ 887 03b7 06       		.byte	0x6
+ 888 03b8 06       		.byte	0x6
+ 889 03b9 E8       		.byte	0xe8
+ 890 03ba E1030000 		.4byte	0x3e1
+ 891 03be 0C       		.uleb128 0xc
+ 892 03bf 6B040000 		.4byte	.LASF41
+ 893 03c3 06       		.byte	0x6
+ 894 03c4 EA       		.byte	0xea
+ 895 03c5 22010000 		.4byte	0x122
+ 896 03c9 00       		.byte	0
+ 897 03ca 0B       		.uleb128 0xb
+ 898 03cb 787000   		.ascii	"xp\000"
+ 899 03ce 06       		.byte	0x6
+ 900 03cf EB       		.byte	0xeb
+ 901 03d0 43010000 		.4byte	0x143
+ 902 03d4 02       		.byte	0x2
+ 903 03d5 0B       		.uleb128 0xb
+ 904 03d6 797000   		.ascii	"yp\000"
+ 905 03d9 06       		.byte	0x6
+ 906 03da EC       		.byte	0xec
+ 907 03db 43010000 		.4byte	0x143
+ 908 03df 04       		.byte	0x4
+ 909 03e0 00       		.byte	0
+ 910 03e1 02       		.uleb128 0x2
+ 911 03e2 7E040000 		.4byte	.LASF60
+ 912 03e6 06       		.byte	0x6
+ 913 03e7 ED       		.byte	0xed
+ 914 03e8 B6030000 		.4byte	0x3b6
+ 915 03ec 12       		.uleb128 0x12
+ 916 03ed FC030000 		.4byte	0x3fc
+ 917 03f1 13       		.uleb128 0x13
+ 918 03f2 FC030000 		.4byte	0x3fc
+ 919 03f6 13       		.uleb128 0x13
+ 920 03f7 02040000 		.4byte	0x402
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqVWbXA.s 			page 20
+
+
+ 921 03fb 00       		.byte	0
+ 922 03fc 07       		.uleb128 0x7
+ 923 03fd 04       		.byte	0x4
+ 924 03fe 63020000 		.4byte	0x263
+ 925 0402 07       		.uleb128 0x7
+ 926 0403 04       		.byte	0x4
+ 927 0404 DE010000 		.4byte	0x1de
+ 928 0408 07       		.uleb128 0x7
+ 929 0409 04       		.byte	0x4
+ 930 040a EC030000 		.4byte	0x3ec
+ 931 040e 14       		.uleb128 0x14
+ 932 040f 18       		.byte	0x18
+ 933 0410 06       		.byte	0x6
+ 934 0411 3201     		.2byte	0x132
+ 935 0413 98040000 		.4byte	0x498
+ 936 0417 10       		.uleb128 0x10
+ 937 0418 73747200 		.ascii	"str\000"
+ 938 041c 06       		.byte	0x6
+ 939 041d 3401     		.2byte	0x134
+ 940 041f 16010000 		.4byte	0x116
+ 941 0423 00       		.byte	0
+ 942 0424 0E       		.uleb128 0xe
+ 943 0425 09040000 		.4byte	.LASF61
+ 944 0429 06       		.byte	0x6
+ 945 042a 3501     		.2byte	0x135
+ 946 042c 5C030000 		.4byte	0x35c
+ 947 0430 04       		.byte	0x4
+ 948 0431 0E       		.uleb128 0xe
+ 949 0432 4F040000 		.4byte	.LASF62
+ 950 0436 06       		.byte	0x6
+ 951 0437 3601     		.2byte	0x136
+ 952 0439 2D010000 		.4byte	0x12d
+ 953 043d 08       		.byte	0x8
+ 954 043e 0E       		.uleb128 0xe
+ 955 043f 46020000 		.4byte	.LASF63
+ 956 0443 06       		.byte	0x6
+ 957 0444 3701     		.2byte	0x137
+ 958 0446 2D010000 		.4byte	0x12d
+ 959 044a 09       		.byte	0x9
+ 960 044b 0E       		.uleb128 0xe
+ 961 044c BC040000 		.4byte	.LASF64
+ 962 0450 06       		.byte	0x6
+ 963 0451 3801     		.2byte	0x138
+ 964 0453 22010000 		.4byte	0x122
+ 965 0457 0A       		.byte	0xa
+ 966 0458 10       		.uleb128 0x10
+ 967 0459 666300   		.ascii	"fc\000"
+ 968 045c 06       		.byte	0x6
+ 969 045d 3901     		.2byte	0x139
+ 970 045f 11030000 		.4byte	0x311
+ 971 0463 0C       		.byte	0xc
+ 972 0464 10       		.uleb128 0x10
+ 973 0465 626300   		.ascii	"bc\000"
+ 974 0468 06       		.byte	0x6
+ 975 0469 3A01     		.2byte	0x13a
+ 976 046b 11030000 		.4byte	0x311
+ 977 046f 0E       		.byte	0xe
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqVWbXA.s 			page 21
+
+
+ 978 0470 10       		.uleb128 0x10
+ 979 0471 69666300 		.ascii	"ifc\000"
+ 980 0475 06       		.byte	0x6
+ 981 0476 3B01     		.2byte	0x13b
+ 982 0478 11030000 		.4byte	0x311
+ 983 047c 10       		.byte	0x10
+ 984 047d 10       		.uleb128 0x10
+ 985 047e 69626300 		.ascii	"ibc\000"
+ 986 0482 06       		.byte	0x6
+ 987 0483 3C01     		.2byte	0x13c
+ 988 0485 11030000 		.4byte	0x311
+ 989 0489 12       		.byte	0x12
+ 990 048a 0E       		.uleb128 0xe
+ 991 048b E7020000 		.4byte	.LASF65
+ 992 048f 06       		.byte	0x6
+ 993 0490 3D01     		.2byte	0x13d
+ 994 0492 22010000 		.4byte	0x122
+ 995 0496 14       		.byte	0x14
+ 996 0497 00       		.byte	0
+ 997 0498 05       		.uleb128 0x5
+ 998 0499 36030000 		.4byte	.LASF66
+ 999 049d 06       		.byte	0x6
+ 1000 049e 3E01     		.2byte	0x13e
+ 1001 04a0 0E040000 		.4byte	0x40e
+ 1002 04a4 12       		.uleb128 0x12
+ 1003 04a5 AF040000 		.4byte	0x4af
+ 1004 04a9 13       		.uleb128 0x13
+ 1005 04aa AF040000 		.4byte	0x4af
+ 1006 04ae 00       		.byte	0
+ 1007 04af 07       		.uleb128 0x7
+ 1008 04b0 04       		.byte	0x4
+ 1009 04b1 AB030000 		.4byte	0x3ab
+ 1010 04b5 07       		.uleb128 0x7
+ 1011 04b6 04       		.byte	0x4
+ 1012 04b7 A4040000 		.4byte	0x4a4
+ 1013 04bb 14       		.uleb128 0x14
+ 1014 04bc 08       		.byte	0x8
+ 1015 04bd 06       		.byte	0x6
+ 1016 04be 2002     		.2byte	0x220
+ 1017 04c0 DF040000 		.4byte	0x4df
+ 1018 04c4 0E       		.uleb128 0xe
+ 1019 04c5 A6020000 		.4byte	.LASF67
+ 1020 04c9 06       		.byte	0x6
+ 1021 04ca 2202     		.2byte	0x222
+ 1022 04cc 14010000 		.4byte	0x114
+ 1023 04d0 00       		.byte	0
+ 1024 04d1 0E       		.uleb128 0xe
+ 1025 04d2 6B040000 		.4byte	.LASF41
+ 1026 04d6 06       		.byte	0x6
+ 1027 04d7 2302     		.2byte	0x223
+ 1028 04d9 22010000 		.4byte	0x122
+ 1029 04dd 04       		.byte	0x4
+ 1030 04de 00       		.byte	0
+ 1031 04df 05       		.uleb128 0x5
+ 1032 04e0 47030000 		.4byte	.LASF68
+ 1033 04e4 06       		.byte	0x6
+ 1034 04e5 2402     		.2byte	0x224
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqVWbXA.s 			page 22
+
+
+ 1035 04e7 BB040000 		.4byte	0x4bb
+ 1036 04eb 14       		.uleb128 0x14
+ 1037 04ec 10       		.byte	0x10
+ 1038 04ed 06       		.byte	0x6
+ 1039 04ee 3C02     		.2byte	0x23c
+ 1040 04f0 5D050000 		.4byte	0x55d
+ 1041 04f4 0E       		.uleb128 0xe
+ 1042 04f5 51030000 		.4byte	.LASF69
+ 1043 04f9 06       		.byte	0x6
+ 1044 04fa 3E02     		.2byte	0x23e
+ 1045 04fc 43010000 		.4byte	0x143
+ 1046 0500 00       		.byte	0
+ 1047 0501 0E       		.uleb128 0xe
+ 1048 0502 67010000 		.4byte	.LASF70
+ 1049 0506 06       		.byte	0x6
+ 1050 0507 3F02     		.2byte	0x23f
+ 1051 0509 43010000 		.4byte	0x143
+ 1052 050d 02       		.byte	0x2
+ 1053 050e 0E       		.uleb128 0xe
+ 1054 050f 57040000 		.4byte	.LASF71
+ 1055 0513 06       		.byte	0x6
+ 1056 0514 4002     		.2byte	0x240
+ 1057 0516 43010000 		.4byte	0x143
+ 1058 051a 04       		.byte	0x4
+ 1059 051b 0E       		.uleb128 0xe
+ 1060 051c 3E020000 		.4byte	.LASF72
+ 1061 0520 06       		.byte	0x6
+ 1062 0521 4102     		.2byte	0x241
+ 1063 0523 43010000 		.4byte	0x143
+ 1064 0527 06       		.byte	0x6
+ 1065 0528 0E       		.uleb128 0xe
+ 1066 0529 E7000000 		.4byte	.LASF73
+ 1067 052d 06       		.byte	0x6
+ 1068 052e 4202     		.2byte	0x242
+ 1069 0530 43010000 		.4byte	0x143
+ 1070 0534 08       		.byte	0x8
+ 1071 0535 0E       		.uleb128 0xe
+ 1072 0536 5F040000 		.4byte	.LASF74
+ 1073 053a 06       		.byte	0x6
+ 1074 053b 4302     		.2byte	0x243
+ 1075 053d 43010000 		.4byte	0x143
+ 1076 0541 0A       		.byte	0xa
+ 1077 0542 0E       		.uleb128 0xe
+ 1078 0543 5C010000 		.4byte	.LASF75
+ 1079 0547 06       		.byte	0x6
+ 1080 0548 4402     		.2byte	0x244
+ 1081 054a 11030000 		.4byte	0x311
+ 1082 054e 0C       		.byte	0xc
+ 1083 054f 0E       		.uleb128 0xe
+ 1084 0550 05010000 		.4byte	.LASF76
+ 1085 0554 06       		.byte	0x6
+ 1086 0555 4502     		.2byte	0x245
+ 1087 0557 11030000 		.4byte	0x311
+ 1088 055b 0E       		.byte	0xe
+ 1089 055c 00       		.byte	0
+ 1090 055d 14       		.uleb128 0x14
+ 1091 055e 6C       		.byte	0x6c
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqVWbXA.s 			page 23
+
+
+ 1092 055f 06       		.byte	0x6
+ 1093 0560 3302     		.2byte	0x233
+ 1094 0562 37060000 		.4byte	0x637
+ 1095 0566 0E       		.uleb128 0xe
+ 1096 0567 DB020000 		.4byte	.LASF77
+ 1097 056b 06       		.byte	0x6
+ 1098 056c 3502     		.2byte	0x235
+ 1099 056e 4C060000 		.4byte	0x64c
+ 1100 0572 00       		.byte	0
+ 1101 0573 0E       		.uleb128 0xe
+ 1102 0574 B3020000 		.4byte	.LASF78
+ 1103 0578 06       		.byte	0x6
+ 1104 0579 3602     		.2byte	0x236
+ 1105 057b 43010000 		.4byte	0x143
+ 1106 057f 04       		.byte	0x4
+ 1107 0580 0E       		.uleb128 0xe
+ 1108 0581 B7000000 		.4byte	.LASF79
+ 1109 0585 06       		.byte	0x6
+ 1110 0586 3702     		.2byte	0x237
+ 1111 0588 43010000 		.4byte	0x143
+ 1112 058c 06       		.byte	0x6
+ 1113 058d 0E       		.uleb128 0xe
+ 1114 058e A0020000 		.4byte	.LASF80
+ 1115 0592 06       		.byte	0x6
+ 1116 0593 3802     		.2byte	0x238
+ 1117 0595 E1030000 		.4byte	0x3e1
+ 1118 0599 08       		.byte	0x8
+ 1119 059a 0E       		.uleb128 0xe
+ 1120 059b CE000000 		.4byte	.LASF81
+ 1121 059f 06       		.byte	0x6
+ 1122 05a0 3902     		.2byte	0x239
+ 1123 05a2 FC030000 		.4byte	0x3fc
+ 1124 05a6 10       		.byte	0x10
+ 1125 05a7 0E       		.uleb128 0xe
+ 1126 05a8 40010000 		.4byte	.LASF82
+ 1127 05ac 06       		.byte	0x6
+ 1128 05ad 3A02     		.2byte	0x23a
+ 1129 05af FC030000 		.4byte	0x3fc
+ 1130 05b3 14       		.byte	0x14
+ 1131 05b4 0E       		.uleb128 0xe
+ 1132 05b5 F9000000 		.4byte	.LASF83
+ 1133 05b9 06       		.byte	0x6
+ 1134 05ba 3B02     		.2byte	0x23b
+ 1135 05bc FC030000 		.4byte	0x3fc
+ 1136 05c0 18       		.byte	0x18
+ 1137 05c1 0E       		.uleb128 0xe
+ 1138 05c2 9F000000 		.4byte	.LASF84
+ 1139 05c6 06       		.byte	0x6
+ 1140 05c7 4602     		.2byte	0x246
+ 1141 05c9 EB040000 		.4byte	0x4eb
+ 1142 05cd 1C       		.byte	0x1c
+ 1143 05ce 0E       		.uleb128 0xe
+ 1144 05cf 09040000 		.4byte	.LASF61
+ 1145 05d3 06       		.byte	0x6
+ 1146 05d4 4702     		.2byte	0x247
+ 1147 05d6 D3010000 		.4byte	0x1d3
+ 1148 05da 2C       		.byte	0x2c
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqVWbXA.s 			page 24
+
+
+ 1149 05db 0E       		.uleb128 0xe
+ 1150 05dc D7040000 		.4byte	.LASF85
+ 1151 05e0 06       		.byte	0x6
+ 1152 05e1 4802     		.2byte	0x248
+ 1153 05e3 2D010000 		.4byte	0x12d
+ 1154 05e7 40       		.byte	0x40
+ 1155 05e8 0E       		.uleb128 0xe
+ 1156 05e9 78000000 		.4byte	.LASF86
+ 1157 05ed 06       		.byte	0x6
+ 1158 05ee 4902     		.2byte	0x249
+ 1159 05f0 2D010000 		.4byte	0x12d
+ 1160 05f4 41       		.byte	0x41
+ 1161 05f5 0E       		.uleb128 0xe
+ 1162 05f6 5C010000 		.4byte	.LASF75
+ 1163 05fa 06       		.byte	0x6
+ 1164 05fb 4A02     		.2byte	0x24a
+ 1165 05fd 11030000 		.4byte	0x311
+ 1166 0601 42       		.byte	0x42
+ 1167 0602 0E       		.uleb128 0xe
+ 1168 0603 05010000 		.4byte	.LASF76
+ 1169 0607 06       		.byte	0x6
+ 1170 0608 4B02     		.2byte	0x24b
+ 1171 060a 11030000 		.4byte	0x311
+ 1172 060e 44       		.byte	0x44
+ 1173 060f 0E       		.uleb128 0xe
+ 1174 0610 17000000 		.4byte	.LASF87
+ 1175 0614 06       		.byte	0x6
+ 1176 0615 4C02     		.2byte	0x24c
+ 1177 0617 11030000 		.4byte	0x311
+ 1178 061b 46       		.byte	0x46
+ 1179 061c 0E       		.uleb128 0xe
+ 1180 061d 6B040000 		.4byte	.LASF41
+ 1181 0621 06       		.byte	0x6
+ 1182 0622 4D02     		.2byte	0x24d
+ 1183 0624 22010000 		.4byte	0x122
+ 1184 0628 48       		.byte	0x48
+ 1185 0629 0E       		.uleb128 0xe
+ 1186 062a A6020000 		.4byte	.LASF67
+ 1187 062e 06       		.byte	0x6
+ 1188 062f 4E02     		.2byte	0x24e
+ 1189 0631 52060000 		.4byte	0x652
+ 1190 0635 4C       		.byte	0x4c
+ 1191 0636 00       		.byte	0
+ 1192 0637 12       		.uleb128 0x12
+ 1193 0638 4C060000 		.4byte	0x64c
+ 1194 063c 13       		.uleb128 0x13
+ 1195 063d 43010000 		.4byte	0x143
+ 1196 0641 13       		.uleb128 0x13
+ 1197 0642 43010000 		.4byte	0x143
+ 1198 0646 13       		.uleb128 0x13
+ 1199 0647 11030000 		.4byte	0x311
+ 1200 064b 00       		.byte	0
+ 1201 064c 07       		.uleb128 0x7
+ 1202 064d 04       		.byte	0x4
+ 1203 064e 37060000 		.4byte	0x637
+ 1204 0652 15       		.uleb128 0x15
+ 1205 0653 DF040000 		.4byte	0x4df
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqVWbXA.s 			page 25
+
+
+ 1206 0657 62060000 		.4byte	0x662
+ 1207 065b 16       		.uleb128 0x16
+ 1208 065c 0D010000 		.4byte	0x10d
+ 1209 0660 03       		.byte	0x3
+ 1210 0661 00       		.byte	0
+ 1211 0662 05       		.uleb128 0x5
+ 1212 0663 71040000 		.4byte	.LASF88
+ 1213 0667 06       		.byte	0x6
+ 1214 0668 4F02     		.2byte	0x24f
+ 1215 066a 5D050000 		.4byte	0x55d
+ 1216 066e 17       		.uleb128 0x17
+ 1217 066f F9020000 		.4byte	.LASF90
+ 1218 0673 01       		.byte	0x1
+ 1219 0674 32       		.byte	0x32
+ 1220 0675 E5000000 		.4byte	0xe5
+ 1221 0679 03       		.byte	0x3
+ 1222 067a 95060000 		.4byte	0x695
+ 1223 067e 18       		.uleb128 0x18
+ 1224 067f 10010000 		.4byte	.LASF89
+ 1225 0683 01       		.byte	0x1
+ 1226 0684 34       		.byte	0x34
+ 1227 0685 D9000000 		.4byte	0xd9
+ 1228 0689 19       		.uleb128 0x19
+ 1229 068a 4E756D00 		.ascii	"Num\000"
+ 1230 068e 01       		.byte	0x1
+ 1231 068f 35       		.byte	0x35
+ 1232 0690 E5000000 		.4byte	0xe5
+ 1233 0694 00       		.byte	0
+ 1234 0695 1A       		.uleb128 0x1a
+ 1235 0696 31040000 		.4byte	.LASF91
+ 1236 069a 01       		.byte	0x1
+ 1237 069b 1E       		.byte	0x1e
+ 1238 069c 03       		.byte	0x3
+ 1239 069d B8060000 		.4byte	0x6b8
+ 1240 06a1 1B       		.uleb128 0x1b
+ 1241 06a2 4E756D00 		.ascii	"Num\000"
+ 1242 06a6 01       		.byte	0x1
+ 1243 06a7 1E       		.byte	0x1e
+ 1244 06a8 42000000 		.4byte	0x42
+ 1245 06ac 18       		.uleb128 0x18
+ 1246 06ad 10010000 		.4byte	.LASF89
+ 1247 06b1 01       		.byte	0x1
+ 1248 06b2 20       		.byte	0x20
+ 1249 06b3 42000000 		.4byte	0x42
+ 1250 06b7 00       		.byte	0
+ 1251 06b8 1C       		.uleb128 0x1c
+ 1252 06b9 6D010000 		.4byte	.LASF92
+ 1253 06bd 01       		.byte	0x1
+ 1254 06be 47       		.byte	0x47
+ 1255 06bf E5000000 		.4byte	0xe5
+ 1256 06c3 00000000 		.4byte	.LFB65
+ 1257 06c7 A2000000 		.4byte	.LFE65-.LFB65
+ 1258 06cb 01       		.uleb128 0x1
+ 1259 06cc 9C       		.byte	0x9c
+ 1260 06cd 92080000 		.4byte	0x892
+ 1261 06d1 1D       		.uleb128 0x1d
+ 1262 06d2 8F000000 		.4byte	.LASF94
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqVWbXA.s 			page 26
+
+
+ 1263 06d6 01       		.byte	0x1
+ 1264 06d7 47       		.byte	0x47
+ 1265 06d8 E5000000 		.4byte	0xe5
+ 1266 06dc 00000000 		.4byte	.LLST0
+ 1267 06e0 1E       		.uleb128 0x1e
+ 1268 06e1 706F7300 		.ascii	"pos\000"
+ 1269 06e5 01       		.byte	0x1
+ 1270 06e6 49       		.byte	0x49
+ 1271 06e7 E5000000 		.4byte	0xe5
+ 1272 06eb 01       		.uleb128 0x1
+ 1273 06ec 54       		.byte	0x54
+ 1274 06ed 1F       		.uleb128 0x1f
+ 1275 06ee 95060000 		.4byte	0x695
+ 1276 06f2 0C000000 		.4byte	.LBB6
+ 1277 06f6 42000000 		.4byte	.LBE6-.LBB6
+ 1278 06fa 01       		.byte	0x1
+ 1279 06fb 4B       		.byte	0x4b
+ 1280 06fc 9E070000 		.4byte	0x79e
+ 1281 0700 20       		.uleb128 0x20
+ 1282 0701 A1060000 		.4byte	0x6a1
+ 1283 0705 21000000 		.4byte	.LLST1
+ 1284 0709 21       		.uleb128 0x21
+ 1285 070a 0C000000 		.4byte	.LBB7
+ 1286 070e 42000000 		.4byte	.LBE7-.LBB7
+ 1287 0712 22       		.uleb128 0x22
+ 1288 0713 AC060000 		.4byte	0x6ac
+ 1289 0717 3F000000 		.4byte	.LLST2
+ 1290 071b 23       		.uleb128 0x23
+ 1291 071c 12000000 		.4byte	.LVL4
+ 1292 0720 7C0A0000 		.4byte	0xa7c
+ 1293 0724 2E070000 		.4byte	0x72e
+ 1294 0728 24       		.uleb128 0x24
+ 1295 0729 01       		.uleb128 0x1
+ 1296 072a 50       		.byte	0x50
+ 1297 072b 01       		.uleb128 0x1
+ 1298 072c 30       		.byte	0x30
+ 1299 072d 00       		.byte	0
+ 1300 072e 23       		.uleb128 0x23
+ 1301 072f 22000000 		.4byte	.LVL6
+ 1302 0733 870A0000 		.4byte	0xa87
+ 1303 0737 41070000 		.4byte	0x741
+ 1304 073b 24       		.uleb128 0x24
+ 1305 073c 01       		.uleb128 0x1
+ 1306 073d 50       		.byte	0x50
+ 1307 073e 01       		.uleb128 0x1
+ 1308 073f 31       		.byte	0x31
+ 1309 0740 00       		.byte	0
+ 1310 0741 23       		.uleb128 0x23
+ 1311 0742 2A000000 		.4byte	.LVL7
+ 1312 0746 870A0000 		.4byte	0xa87
+ 1313 074a 54070000 		.4byte	0x754
+ 1314 074e 24       		.uleb128 0x24
+ 1315 074f 01       		.uleb128 0x1
+ 1316 0750 50       		.byte	0x50
+ 1317 0751 01       		.uleb128 0x1
+ 1318 0752 30       		.byte	0x30
+ 1319 0753 00       		.byte	0
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqVWbXA.s 			page 27
+
+
+ 1320 0754 23       		.uleb128 0x23
+ 1321 0755 30000000 		.4byte	.LVL8
+ 1322 0759 7C0A0000 		.4byte	0xa7c
+ 1323 075d 67070000 		.4byte	0x767
+ 1324 0761 24       		.uleb128 0x24
+ 1325 0762 01       		.uleb128 0x1
+ 1326 0763 50       		.byte	0x50
+ 1327 0764 01       		.uleb128 0x1
+ 1328 0765 30       		.byte	0x30
+ 1329 0766 00       		.byte	0
+ 1330 0767 23       		.uleb128 0x23
+ 1331 0768 36000000 		.4byte	.LVL9
+ 1332 076c 920A0000 		.4byte	0xa92
+ 1333 0770 7A070000 		.4byte	0x77a
+ 1334 0774 24       		.uleb128 0x24
+ 1335 0775 01       		.uleb128 0x1
+ 1336 0776 50       		.byte	0x50
+ 1337 0777 01       		.uleb128 0x1
+ 1338 0778 3A       		.byte	0x3a
+ 1339 0779 00       		.byte	0
+ 1340 077a 23       		.uleb128 0x23
+ 1341 077b 3C000000 		.4byte	.LVL10
+ 1342 077f 7C0A0000 		.4byte	0xa7c
+ 1343 0783 8D070000 		.4byte	0x78d
+ 1344 0787 24       		.uleb128 0x24
+ 1345 0788 01       		.uleb128 0x1
+ 1346 0789 50       		.byte	0x50
+ 1347 078a 01       		.uleb128 0x1
+ 1348 078b 31       		.byte	0x31
+ 1349 078c 00       		.byte	0
+ 1350 078d 25       		.uleb128 0x25
+ 1351 078e 42000000 		.4byte	.LVL11
+ 1352 0792 920A0000 		.4byte	0xa92
+ 1353 0796 24       		.uleb128 0x24
+ 1354 0797 01       		.uleb128 0x1
+ 1355 0798 50       		.byte	0x50
+ 1356 0799 01       		.uleb128 0x1
+ 1357 079a 3A       		.byte	0x3a
+ 1358 079b 00       		.byte	0
+ 1359 079c 00       		.byte	0
+ 1360 079d 00       		.byte	0
+ 1361 079e 1F       		.uleb128 0x1f
+ 1362 079f 6E060000 		.4byte	0x66e
+ 1363 07a3 66000000 		.4byte	.LBB8
+ 1364 07a7 32000000 		.4byte	.LBE8-.LBB8
+ 1365 07ab 01       		.byte	0x1
+ 1366 07ac 50       		.byte	0x50
+ 1367 07ad 23080000 		.4byte	0x823
+ 1368 07b1 21       		.uleb128 0x21
+ 1369 07b2 66000000 		.4byte	.LBB9
+ 1370 07b6 32000000 		.4byte	.LBE9-.LBB9
+ 1371 07ba 22       		.uleb128 0x22
+ 1372 07bb 7E060000 		.4byte	0x67e
+ 1373 07bf 69000000 		.4byte	.LLST3
+ 1374 07c3 22       		.uleb128 0x22
+ 1375 07c4 89060000 		.4byte	0x689
+ 1376 07c8 87000000 		.4byte	.LLST4
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqVWbXA.s 			page 28
+
+
+ 1377 07cc 23       		.uleb128 0x23
+ 1378 07cd 76000000 		.4byte	.LVL24
+ 1379 07d1 7C0A0000 		.4byte	0xa7c
+ 1380 07d5 DF070000 		.4byte	0x7df
+ 1381 07d9 24       		.uleb128 0x24
+ 1382 07da 01       		.uleb128 0x1
+ 1383 07db 50       		.byte	0x50
+ 1384 07dc 01       		.uleb128 0x1
+ 1385 07dd 31       		.byte	0x31
+ 1386 07de 00       		.byte	0
+ 1387 07df 23       		.uleb128 0x23
+ 1388 07e0 7C000000 		.4byte	.LVL25
+ 1389 07e4 920A0000 		.4byte	0xa92
+ 1390 07e8 F2070000 		.4byte	0x7f2
+ 1391 07ec 24       		.uleb128 0x24
+ 1392 07ed 01       		.uleb128 0x1
+ 1393 07ee 50       		.byte	0x50
+ 1394 07ef 01       		.uleb128 0x1
+ 1395 07f0 3A       		.byte	0x3a
+ 1396 07f1 00       		.byte	0
+ 1397 07f2 23       		.uleb128 0x23
+ 1398 07f3 82000000 		.4byte	.LVL26
+ 1399 07f7 7C0A0000 		.4byte	0xa7c
+ 1400 07fb 05080000 		.4byte	0x805
+ 1401 07ff 24       		.uleb128 0x24
+ 1402 0800 01       		.uleb128 0x1
+ 1403 0801 50       		.byte	0x50
+ 1404 0802 01       		.uleb128 0x1
+ 1405 0803 30       		.byte	0x30
+ 1406 0804 00       		.byte	0
+ 1407 0805 23       		.uleb128 0x23
+ 1408 0806 88000000 		.4byte	.LVL27
+ 1409 080a 920A0000 		.4byte	0xa92
+ 1410 080e 18080000 		.4byte	0x818
+ 1411 0812 24       		.uleb128 0x24
+ 1412 0813 01       		.uleb128 0x1
+ 1413 0814 50       		.byte	0x50
+ 1414 0815 01       		.uleb128 0x1
+ 1415 0816 3A       		.byte	0x3a
+ 1416 0817 00       		.byte	0
+ 1417 0818 26       		.uleb128 0x26
+ 1418 0819 8C000000 		.4byte	.LVL28
+ 1419 081d 9D0A0000 		.4byte	0xa9d
+ 1420 0821 00       		.byte	0
+ 1421 0822 00       		.byte	0
+ 1422 0823 23       		.uleb128 0x23
+ 1423 0824 0A000000 		.4byte	.LVL2
+ 1424 0828 A80A0000 		.4byte	0xaa8
+ 1425 082c 36080000 		.4byte	0x836
+ 1426 0830 24       		.uleb128 0x24
+ 1427 0831 01       		.uleb128 0x1
+ 1428 0832 50       		.byte	0x50
+ 1429 0833 01       		.uleb128 0x1
+ 1430 0834 30       		.byte	0x30
+ 1431 0835 00       		.byte	0
+ 1432 0836 23       		.uleb128 0x23
+ 1433 0837 54000000 		.4byte	.LVL17
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqVWbXA.s 			page 29
+
+
+ 1434 083b 7C0A0000 		.4byte	0xa7c
+ 1435 083f 49080000 		.4byte	0x849
+ 1436 0843 24       		.uleb128 0x24
+ 1437 0844 01       		.uleb128 0x1
+ 1438 0845 50       		.byte	0x50
+ 1439 0846 01       		.uleb128 0x1
+ 1440 0847 31       		.byte	0x31
+ 1441 0848 00       		.byte	0
+ 1442 0849 23       		.uleb128 0x23
+ 1443 084a 5A000000 		.4byte	.LVL18
+ 1444 084e 920A0000 		.4byte	0xa92
+ 1445 0852 5C080000 		.4byte	0x85c
+ 1446 0856 24       		.uleb128 0x24
+ 1447 0857 01       		.uleb128 0x1
+ 1448 0858 50       		.byte	0x50
+ 1449 0859 01       		.uleb128 0x1
+ 1450 085a 3A       		.byte	0x3a
+ 1451 085b 00       		.byte	0
+ 1452 085c 23       		.uleb128 0x23
+ 1453 085d 60000000 		.4byte	.LVL19
+ 1454 0861 7C0A0000 		.4byte	0xa7c
+ 1455 0865 6F080000 		.4byte	0x86f
+ 1456 0869 24       		.uleb128 0x24
+ 1457 086a 01       		.uleb128 0x1
+ 1458 086b 50       		.byte	0x50
+ 1459 086c 01       		.uleb128 0x1
+ 1460 086d 30       		.byte	0x30
+ 1461 086e 00       		.byte	0
+ 1462 086f 23       		.uleb128 0x23
+ 1463 0870 66000000 		.4byte	.LVL20
+ 1464 0874 920A0000 		.4byte	0xa92
+ 1465 0878 82080000 		.4byte	0x882
+ 1466 087c 24       		.uleb128 0x24
+ 1467 087d 01       		.uleb128 0x1
+ 1468 087e 50       		.byte	0x50
+ 1469 087f 01       		.uleb128 0x1
+ 1470 0880 3A       		.byte	0x3a
+ 1471 0881 00       		.byte	0
+ 1472 0882 25       		.uleb128 0x25
+ 1473 0883 9E000000 		.4byte	.LVL33
+ 1474 0887 A80A0000 		.4byte	0xaa8
+ 1475 088b 24       		.uleb128 0x24
+ 1476 088c 01       		.uleb128 0x1
+ 1477 088d 50       		.byte	0x50
+ 1478 088e 01       		.uleb128 0x1
+ 1479 088f 31       		.byte	0x31
+ 1480 0890 00       		.byte	0
+ 1481 0891 00       		.byte	0
+ 1482 0892 27       		.uleb128 0x27
+ 1483 0893 8D030000 		.4byte	.LASF110
+ 1484 0897 01       		.byte	0x1
+ 1485 0898 59       		.byte	0x59
+ 1486 0899 00000000 		.4byte	.LFB66
+ 1487 089d 10000000 		.4byte	.LFE66-.LFB66
+ 1488 08a1 01       		.uleb128 0x1
+ 1489 08a2 9C       		.byte	0x9c
+ 1490 08a3 CB080000 		.4byte	0x8cb
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqVWbXA.s 			page 30
+
+
+ 1491 08a7 23       		.uleb128 0x23
+ 1492 08a8 08000000 		.4byte	.LVL34
+ 1493 08ac B8060000 		.4byte	0x6b8
+ 1494 08b0 BB080000 		.4byte	0x8bb
+ 1495 08b4 24       		.uleb128 0x24
+ 1496 08b5 01       		.uleb128 0x1
+ 1497 08b6 50       		.byte	0x50
+ 1498 08b7 02       		.uleb128 0x2
+ 1499 08b8 08       		.byte	0x8
+ 1500 08b9 80       		.byte	0x80
+ 1501 08ba 00       		.byte	0
+ 1502 08bb 25       		.uleb128 0x25
+ 1503 08bc 0E000000 		.4byte	.LVL35
+ 1504 08c0 B30A0000 		.4byte	0xab3
+ 1505 08c4 24       		.uleb128 0x24
+ 1506 08c5 01       		.uleb128 0x1
+ 1507 08c6 50       		.byte	0x50
+ 1508 08c7 01       		.uleb128 0x1
+ 1509 08c8 35       		.byte	0x35
+ 1510 08c9 00       		.byte	0
+ 1511 08ca 00       		.byte	0
+ 1512 08cb 1C       		.uleb128 0x1c
+ 1513 08cc 40000000 		.4byte	.LASF93
+ 1514 08d0 01       		.byte	0x1
+ 1515 08d1 63       		.byte	0x63
+ 1516 08d2 D9000000 		.4byte	0xd9
+ 1517 08d6 00000000 		.4byte	.LFB67
+ 1518 08da D8000000 		.4byte	.LFE67-.LFB67
+ 1519 08de 01       		.uleb128 0x1
+ 1520 08df 9C       		.byte	0x9c
+ 1521 08e0 F4090000 		.4byte	0x9f4
+ 1522 08e4 28       		.uleb128 0x28
+ 1523 08e5 5800     		.ascii	"X\000"
+ 1524 08e7 01       		.byte	0x1
+ 1525 08e8 63       		.byte	0x63
+ 1526 08e9 F4090000 		.4byte	0x9f4
+ 1527 08ed A5000000 		.4byte	.LLST5
+ 1528 08f1 28       		.uleb128 0x28
+ 1529 08f2 5900     		.ascii	"Y\000"
+ 1530 08f4 01       		.byte	0x1
+ 1531 08f5 63       		.byte	0x63
+ 1532 08f6 F4090000 		.4byte	0x9f4
+ 1533 08fa D1000000 		.4byte	.LLST6
+ 1534 08fe 29       		.uleb128 0x29
+ 1535 08ff 783000   		.ascii	"x0\000"
+ 1536 0902 01       		.byte	0x1
+ 1537 0903 65       		.byte	0x65
+ 1538 0904 E5000000 		.4byte	0xe5
+ 1539 0908 FD000000 		.4byte	.LLST7
+ 1540 090c 29       		.uleb128 0x29
+ 1541 090d 793000   		.ascii	"y0\000"
+ 1542 0910 01       		.byte	0x1
+ 1543 0911 65       		.byte	0x65
+ 1544 0912 E5000000 		.4byte	0xe5
+ 1545 0916 10010000 		.4byte	.LLST8
+ 1546 091a 29       		.uleb128 0x29
+ 1547 091b 783100   		.ascii	"x1\000"
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqVWbXA.s 			page 31
+
+
+ 1548 091e 01       		.byte	0x1
+ 1549 091f 65       		.byte	0x65
+ 1550 0920 E5000000 		.4byte	0xe5
+ 1551 0924 23010000 		.4byte	.LLST9
+ 1552 0928 29       		.uleb128 0x29
+ 1553 0929 793100   		.ascii	"y1\000"
+ 1554 092c 01       		.byte	0x1
+ 1555 092d 65       		.byte	0x65
+ 1556 092e E5000000 		.4byte	0xe5
+ 1557 0932 41010000 		.4byte	.LLST10
+ 1558 0936 29       		.uleb128 0x29
+ 1559 0937 78617600 		.ascii	"xav\000"
+ 1560 093b 01       		.byte	0x1
+ 1561 093c 65       		.byte	0x65
+ 1562 093d E5000000 		.4byte	0xe5
+ 1563 0941 5F010000 		.4byte	.LLST11
+ 1564 0945 29       		.uleb128 0x29
+ 1565 0946 79617600 		.ascii	"yav\000"
+ 1566 094a 01       		.byte	0x1
+ 1567 094b 65       		.byte	0x65
+ 1568 094c E5000000 		.4byte	0xe5
+ 1569 0950 90010000 		.4byte	.LLST12
+ 1570 0954 29       		.uleb128 0x29
+ 1571 0955 707800   		.ascii	"px\000"
+ 1572 0958 01       		.byte	0x1
+ 1573 0959 65       		.byte	0x65
+ 1574 095a E5000000 		.4byte	0xe5
+ 1575 095e A3010000 		.4byte	.LLST13
+ 1576 0962 29       		.uleb128 0x29
+ 1577 0963 707900   		.ascii	"py\000"
+ 1578 0966 01       		.byte	0x1
+ 1579 0967 65       		.byte	0x65
+ 1580 0968 E5000000 		.4byte	0xe5
+ 1581 096c B6010000 		.4byte	.LLST14
+ 1582 0970 2A       		.uleb128 0x2a
+ 1583 0971 3F030000 		.4byte	.LASF95
+ 1584 0975 01       		.byte	0x1
+ 1585 0976 66       		.byte	0x66
+ 1586 0977 E5000000 		.4byte	0xe5
+ 1587 097b C9010000 		.4byte	.LLST15
+ 1588 097f 23       		.uleb128 0x23
+ 1589 0980 10000000 		.4byte	.LVL39
+ 1590 0984 B8060000 		.4byte	0x6b8
+ 1591 0988 93090000 		.4byte	0x993
+ 1592 098c 24       		.uleb128 0x24
+ 1593 098d 01       		.uleb128 0x1
+ 1594 098e 50       		.byte	0x50
+ 1595 098f 02       		.uleb128 0x2
+ 1596 0990 08       		.byte	0x8
+ 1597 0991 90       		.byte	0x90
+ 1598 0992 00       		.byte	0
+ 1599 0993 23       		.uleb128 0x23
+ 1600 0994 16000000 		.4byte	.LVL40
+ 1601 0998 B8060000 		.4byte	0x6b8
+ 1602 099c A7090000 		.4byte	0x9a7
+ 1603 09a0 24       		.uleb128 0x24
+ 1604 09a1 01       		.uleb128 0x1
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqVWbXA.s 			page 32
+
+
+ 1605 09a2 50       		.byte	0x50
+ 1606 09a3 02       		.uleb128 0x2
+ 1607 09a4 08       		.byte	0x8
+ 1608 09a5 90       		.byte	0x90
+ 1609 09a6 00       		.byte	0
+ 1610 09a7 23       		.uleb128 0x23
+ 1611 09a8 1E000000 		.4byte	.LVL42
+ 1612 09ac B8060000 		.4byte	0x6b8
+ 1613 09b0 BB090000 		.4byte	0x9bb
+ 1614 09b4 24       		.uleb128 0x24
+ 1615 09b5 01       		.uleb128 0x1
+ 1616 09b6 50       		.byte	0x50
+ 1617 09b7 02       		.uleb128 0x2
+ 1618 09b8 08       		.byte	0x8
+ 1619 09b9 90       		.byte	0x90
+ 1620 09ba 00       		.byte	0
+ 1621 09bb 23       		.uleb128 0x23
+ 1622 09bc 26000000 		.4byte	.LVL44
+ 1623 09c0 B8060000 		.4byte	0x6b8
+ 1624 09c4 CF090000 		.4byte	0x9cf
+ 1625 09c8 24       		.uleb128 0x24
+ 1626 09c9 01       		.uleb128 0x1
+ 1627 09ca 50       		.byte	0x50
+ 1628 09cb 02       		.uleb128 0x2
+ 1629 09cc 08       		.byte	0x8
+ 1630 09cd D0       		.byte	0xd0
+ 1631 09ce 00       		.byte	0
+ 1632 09cf 23       		.uleb128 0x23
+ 1633 09d0 2C000000 		.4byte	.LVL45
+ 1634 09d4 B8060000 		.4byte	0x6b8
+ 1635 09d8 E3090000 		.4byte	0x9e3
+ 1636 09dc 24       		.uleb128 0x24
+ 1637 09dd 01       		.uleb128 0x1
+ 1638 09de 50       		.byte	0x50
+ 1639 09df 02       		.uleb128 0x2
+ 1640 09e0 08       		.byte	0x8
+ 1641 09e1 D0       		.byte	0xd0
+ 1642 09e2 00       		.byte	0
+ 1643 09e3 25       		.uleb128 0x25
+ 1644 09e4 34000000 		.4byte	.LVL47
+ 1645 09e8 B8060000 		.4byte	0x6b8
+ 1646 09ec 24       		.uleb128 0x24
+ 1647 09ed 01       		.uleb128 0x1
+ 1648 09ee 50       		.byte	0x50
+ 1649 09ef 02       		.uleb128 0x2
+ 1650 09f0 08       		.byte	0x8
+ 1651 09f1 D0       		.byte	0xd0
+ 1652 09f2 00       		.byte	0
+ 1653 09f3 00       		.byte	0
+ 1654 09f4 07       		.uleb128 0x7
+ 1655 09f5 04       		.byte	0x4
+ 1656 09f6 E5000000 		.4byte	0xe5
+ 1657 09fa 1C       		.uleb128 0x1c
+ 1658 09fb 8A020000 		.4byte	.LASF96
+ 1659 09ff 01       		.byte	0x1
+ 1660 0a00 8D       		.byte	0x8d
+ 1661 0a01 E5000000 		.4byte	0xe5
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqVWbXA.s 			page 33
+
+
+ 1662 0a05 00000000 		.4byte	.LFB68
+ 1663 0a09 16000000 		.4byte	.LFE68-.LFB68
+ 1664 0a0d 01       		.uleb128 0x1
+ 1665 0a0e 9C       		.byte	0x9c
+ 1666 0a0f 380A0000 		.4byte	0xa38
+ 1667 0a13 23       		.uleb128 0x23
+ 1668 0a14 08000000 		.4byte	.LVL64
+ 1669 0a18 B8060000 		.4byte	0x6b8
+ 1670 0a1c 270A0000 		.4byte	0xa27
+ 1671 0a20 24       		.uleb128 0x24
+ 1672 0a21 01       		.uleb128 0x1
+ 1673 0a22 50       		.byte	0x50
+ 1674 0a23 02       		.uleb128 0x2
+ 1675 0a24 08       		.byte	0x8
+ 1676 0a25 C0       		.byte	0xc0
+ 1677 0a26 00       		.byte	0
+ 1678 0a27 25       		.uleb128 0x25
+ 1679 0a28 10000000 		.4byte	.LVL65
+ 1680 0a2c B8060000 		.4byte	0x6b8
+ 1681 0a30 24       		.uleb128 0x24
+ 1682 0a31 01       		.uleb128 0x1
+ 1683 0a32 50       		.byte	0x50
+ 1684 0a33 02       		.uleb128 0x2
+ 1685 0a34 08       		.byte	0x8
+ 1686 0a35 B0       		.byte	0xb0
+ 1687 0a36 00       		.byte	0
+ 1688 0a37 00       		.byte	0
+ 1689 0a38 2B       		.uleb128 0x2b
+ 1690 0a39 80030000 		.4byte	.LASF97
+ 1691 0a3d 07       		.byte	0x7
+ 1692 0a3e 1207     		.2byte	0x712
+ 1693 0a40 440A0000 		.4byte	0xa44
+ 1694 0a44 2C       		.uleb128 0x2c
+ 1695 0a45 CE000000 		.4byte	0xce
+ 1696 0a49 2D       		.uleb128 0x2d
+ 1697 0a4a 29020000 		.4byte	.LASF98
+ 1698 0a4e 08       		.byte	0x8
+ 1699 0a4f 11       		.byte	0x11
+ 1700 0a50 E5000000 		.4byte	0xe5
+ 1701 0a54 05       		.uleb128 0x5
+ 1702 0a55 03       		.byte	0x3
+ 1703 0a56 00000000 		.4byte	PosX
+ 1704 0a5a 2D       		.uleb128 0x2d
+ 1705 0a5b 2E020000 		.4byte	.LASF99
+ 1706 0a5f 08       		.byte	0x8
+ 1707 0a60 12       		.byte	0x12
+ 1708 0a61 E5000000 		.4byte	0xe5
+ 1709 0a65 05       		.uleb128 0x5
+ 1710 0a66 03       		.byte	0x3
+ 1711 0a67 00000000 		.4byte	PosY
+ 1712 0a6b 2D       		.uleb128 0x2d
+ 1713 0a6c 2E030000 		.4byte	.LASF100
+ 1714 0a70 09       		.byte	0x9
+ 1715 0a71 2E       		.byte	0x2e
+ 1716 0a72 62060000 		.4byte	0x662
+ 1717 0a76 05       		.uleb128 0x5
+ 1718 0a77 03       		.byte	0x3
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqVWbXA.s 			page 34
+
+
+ 1719 0a78 00000000 		.4byte	gui1963
+ 1720 0a7c 2E       		.uleb128 0x2e
+ 1721 0a7d FD030000 		.4byte	.LASF101
+ 1722 0a81 FD030000 		.4byte	.LASF101
+ 1723 0a85 0A       		.byte	0xa
+ 1724 0a86 26       		.byte	0x26
+ 1725 0a87 2E       		.uleb128 0x2e
+ 1726 0a88 D6030000 		.4byte	.LASF102
+ 1727 0a8c D6030000 		.4byte	.LASF102
+ 1728 0a90 0B       		.byte	0xb
+ 1729 0a91 26       		.byte	0x26
+ 1730 0a92 2E       		.uleb128 0x2e
+ 1731 0a93 53020000 		.4byte	.LASF103
+ 1732 0a97 53020000 		.4byte	.LASF103
+ 1733 0a9b 0C       		.byte	0xc
+ 1734 0a9c 79       		.byte	0x79
+ 1735 0a9d 2E       		.uleb128 0x2e
+ 1736 0a9e 85000000 		.4byte	.LASF104
+ 1737 0aa2 85000000 		.4byte	.LASF104
+ 1738 0aa6 0D       		.byte	0xd
+ 1739 0aa7 29       		.byte	0x29
+ 1740 0aa8 2E       		.uleb128 0x2e
+ 1741 0aa9 33020000 		.4byte	.LASF105
+ 1742 0aad 33020000 		.4byte	.LASF105
+ 1743 0ab1 0E       		.byte	0xe
+ 1744 0ab2 26       		.byte	0x26
+ 1745 0ab3 2E       		.uleb128 0x2e
+ 1746 0ab4 00000000 		.4byte	.LASF106
+ 1747 0ab8 00000000 		.4byte	.LASF106
+ 1748 0abc 0C       		.byte	0xc
+ 1749 0abd 76       		.byte	0x76
+ 1750 0abe 00       		.byte	0
+ 1751              		.section	.debug_abbrev,"",%progbits
+ 1752              	.Ldebug_abbrev0:
+ 1753 0000 01       		.uleb128 0x1
+ 1754 0001 11       		.uleb128 0x11
+ 1755 0002 01       		.byte	0x1
+ 1756 0003 25       		.uleb128 0x25
+ 1757 0004 0E       		.uleb128 0xe
+ 1758 0005 13       		.uleb128 0x13
+ 1759 0006 0B       		.uleb128 0xb
+ 1760 0007 03       		.uleb128 0x3
+ 1761 0008 0E       		.uleb128 0xe
+ 1762 0009 1B       		.uleb128 0x1b
+ 1763 000a 0E       		.uleb128 0xe
+ 1764 000b 55       		.uleb128 0x55
+ 1765 000c 17       		.uleb128 0x17
+ 1766 000d 11       		.uleb128 0x11
+ 1767 000e 01       		.uleb128 0x1
+ 1768 000f 10       		.uleb128 0x10
+ 1769 0010 17       		.uleb128 0x17
+ 1770 0011 00       		.byte	0
+ 1771 0012 00       		.byte	0
+ 1772 0013 02       		.uleb128 0x2
+ 1773 0014 16       		.uleb128 0x16
+ 1774 0015 00       		.byte	0
+ 1775 0016 03       		.uleb128 0x3
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqVWbXA.s 			page 35
+
+
+ 1776 0017 0E       		.uleb128 0xe
+ 1777 0018 3A       		.uleb128 0x3a
+ 1778 0019 0B       		.uleb128 0xb
+ 1779 001a 3B       		.uleb128 0x3b
+ 1780 001b 0B       		.uleb128 0xb
+ 1781 001c 49       		.uleb128 0x49
+ 1782 001d 13       		.uleb128 0x13
+ 1783 001e 00       		.byte	0
+ 1784 001f 00       		.byte	0
+ 1785 0020 03       		.uleb128 0x3
+ 1786 0021 24       		.uleb128 0x24
+ 1787 0022 00       		.byte	0
+ 1788 0023 0B       		.uleb128 0xb
+ 1789 0024 0B       		.uleb128 0xb
+ 1790 0025 3E       		.uleb128 0x3e
+ 1791 0026 0B       		.uleb128 0xb
+ 1792 0027 03       		.uleb128 0x3
+ 1793 0028 0E       		.uleb128 0xe
+ 1794 0029 00       		.byte	0
+ 1795 002a 00       		.byte	0
+ 1796 002b 04       		.uleb128 0x4
+ 1797 002c 24       		.uleb128 0x24
+ 1798 002d 00       		.byte	0
+ 1799 002e 0B       		.uleb128 0xb
+ 1800 002f 0B       		.uleb128 0xb
+ 1801 0030 3E       		.uleb128 0x3e
+ 1802 0031 0B       		.uleb128 0xb
+ 1803 0032 03       		.uleb128 0x3
+ 1804 0033 08       		.uleb128 0x8
+ 1805 0034 00       		.byte	0
+ 1806 0035 00       		.byte	0
+ 1807 0036 05       		.uleb128 0x5
+ 1808 0037 16       		.uleb128 0x16
+ 1809 0038 00       		.byte	0
+ 1810 0039 03       		.uleb128 0x3
+ 1811 003a 0E       		.uleb128 0xe
+ 1812 003b 3A       		.uleb128 0x3a
+ 1813 003c 0B       		.uleb128 0xb
+ 1814 003d 3B       		.uleb128 0x3b
+ 1815 003e 05       		.uleb128 0x5
+ 1816 003f 49       		.uleb128 0x49
+ 1817 0040 13       		.uleb128 0x13
+ 1818 0041 00       		.byte	0
+ 1819 0042 00       		.byte	0
+ 1820 0043 06       		.uleb128 0x6
+ 1821 0044 0F       		.uleb128 0xf
+ 1822 0045 00       		.byte	0
+ 1823 0046 0B       		.uleb128 0xb
+ 1824 0047 0B       		.uleb128 0xb
+ 1825 0048 00       		.byte	0
+ 1826 0049 00       		.byte	0
+ 1827 004a 07       		.uleb128 0x7
+ 1828 004b 0F       		.uleb128 0xf
+ 1829 004c 00       		.byte	0
+ 1830 004d 0B       		.uleb128 0xb
+ 1831 004e 0B       		.uleb128 0xb
+ 1832 004f 49       		.uleb128 0x49
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqVWbXA.s 			page 36
+
+
+ 1833 0050 13       		.uleb128 0x13
+ 1834 0051 00       		.byte	0
+ 1835 0052 00       		.byte	0
+ 1836 0053 08       		.uleb128 0x8
+ 1837 0054 04       		.uleb128 0x4
+ 1838 0055 01       		.byte	0x1
+ 1839 0056 0B       		.uleb128 0xb
+ 1840 0057 0B       		.uleb128 0xb
+ 1841 0058 49       		.uleb128 0x49
+ 1842 0059 13       		.uleb128 0x13
+ 1843 005a 3A       		.uleb128 0x3a
+ 1844 005b 0B       		.uleb128 0xb
+ 1845 005c 3B       		.uleb128 0x3b
+ 1846 005d 0B       		.uleb128 0xb
+ 1847 005e 01       		.uleb128 0x1
+ 1848 005f 13       		.uleb128 0x13
+ 1849 0060 00       		.byte	0
+ 1850 0061 00       		.byte	0
+ 1851 0062 09       		.uleb128 0x9
+ 1852 0063 28       		.uleb128 0x28
+ 1853 0064 00       		.byte	0
+ 1854 0065 03       		.uleb128 0x3
+ 1855 0066 0E       		.uleb128 0xe
+ 1856 0067 1C       		.uleb128 0x1c
+ 1857 0068 0B       		.uleb128 0xb
+ 1858 0069 00       		.byte	0
+ 1859 006a 00       		.byte	0
+ 1860 006b 0A       		.uleb128 0xa
+ 1861 006c 13       		.uleb128 0x13
+ 1862 006d 01       		.byte	0x1
+ 1863 006e 0B       		.uleb128 0xb
+ 1864 006f 0B       		.uleb128 0xb
+ 1865 0070 3A       		.uleb128 0x3a
+ 1866 0071 0B       		.uleb128 0xb
+ 1867 0072 3B       		.uleb128 0x3b
+ 1868 0073 0B       		.uleb128 0xb
+ 1869 0074 01       		.uleb128 0x1
+ 1870 0075 13       		.uleb128 0x13
+ 1871 0076 00       		.byte	0
+ 1872 0077 00       		.byte	0
+ 1873 0078 0B       		.uleb128 0xb
+ 1874 0079 0D       		.uleb128 0xd
+ 1875 007a 00       		.byte	0
+ 1876 007b 03       		.uleb128 0x3
+ 1877 007c 08       		.uleb128 0x8
+ 1878 007d 3A       		.uleb128 0x3a
+ 1879 007e 0B       		.uleb128 0xb
+ 1880 007f 3B       		.uleb128 0x3b
+ 1881 0080 0B       		.uleb128 0xb
+ 1882 0081 49       		.uleb128 0x49
+ 1883 0082 13       		.uleb128 0x13
+ 1884 0083 38       		.uleb128 0x38
+ 1885 0084 0B       		.uleb128 0xb
+ 1886 0085 00       		.byte	0
+ 1887 0086 00       		.byte	0
+ 1888 0087 0C       		.uleb128 0xc
+ 1889 0088 0D       		.uleb128 0xd
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqVWbXA.s 			page 37
+
+
+ 1890 0089 00       		.byte	0
+ 1891 008a 03       		.uleb128 0x3
+ 1892 008b 0E       		.uleb128 0xe
+ 1893 008c 3A       		.uleb128 0x3a
+ 1894 008d 0B       		.uleb128 0xb
+ 1895 008e 3B       		.uleb128 0x3b
+ 1896 008f 0B       		.uleb128 0xb
+ 1897 0090 49       		.uleb128 0x49
+ 1898 0091 13       		.uleb128 0x13
+ 1899 0092 38       		.uleb128 0x38
+ 1900 0093 0B       		.uleb128 0xb
+ 1901 0094 00       		.byte	0
+ 1902 0095 00       		.byte	0
+ 1903 0096 0D       		.uleb128 0xd
+ 1904 0097 13       		.uleb128 0x13
+ 1905 0098 01       		.byte	0x1
+ 1906 0099 03       		.uleb128 0x3
+ 1907 009a 0E       		.uleb128 0xe
+ 1908 009b 0B       		.uleb128 0xb
+ 1909 009c 0B       		.uleb128 0xb
+ 1910 009d 3A       		.uleb128 0x3a
+ 1911 009e 0B       		.uleb128 0xb
+ 1912 009f 3B       		.uleb128 0x3b
+ 1913 00a0 0B       		.uleb128 0xb
+ 1914 00a1 01       		.uleb128 0x1
+ 1915 00a2 13       		.uleb128 0x13
+ 1916 00a3 00       		.byte	0
+ 1917 00a4 00       		.byte	0
+ 1918 00a5 0E       		.uleb128 0xe
+ 1919 00a6 0D       		.uleb128 0xd
+ 1920 00a7 00       		.byte	0
+ 1921 00a8 03       		.uleb128 0x3
+ 1922 00a9 0E       		.uleb128 0xe
+ 1923 00aa 3A       		.uleb128 0x3a
+ 1924 00ab 0B       		.uleb128 0xb
+ 1925 00ac 3B       		.uleb128 0x3b
+ 1926 00ad 05       		.uleb128 0x5
+ 1927 00ae 49       		.uleb128 0x49
+ 1928 00af 13       		.uleb128 0x13
+ 1929 00b0 38       		.uleb128 0x38
+ 1930 00b1 0B       		.uleb128 0xb
+ 1931 00b2 00       		.byte	0
+ 1932 00b3 00       		.byte	0
+ 1933 00b4 0F       		.uleb128 0xf
+ 1934 00b5 13       		.uleb128 0x13
+ 1935 00b6 01       		.byte	0x1
+ 1936 00b7 03       		.uleb128 0x3
+ 1937 00b8 0E       		.uleb128 0xe
+ 1938 00b9 0B       		.uleb128 0xb
+ 1939 00ba 0B       		.uleb128 0xb
+ 1940 00bb 3A       		.uleb128 0x3a
+ 1941 00bc 0B       		.uleb128 0xb
+ 1942 00bd 3B       		.uleb128 0x3b
+ 1943 00be 05       		.uleb128 0x5
+ 1944 00bf 01       		.uleb128 0x1
+ 1945 00c0 13       		.uleb128 0x13
+ 1946 00c1 00       		.byte	0
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqVWbXA.s 			page 38
+
+
+ 1947 00c2 00       		.byte	0
+ 1948 00c3 10       		.uleb128 0x10
+ 1949 00c4 0D       		.uleb128 0xd
+ 1950 00c5 00       		.byte	0
+ 1951 00c6 03       		.uleb128 0x3
+ 1952 00c7 08       		.uleb128 0x8
+ 1953 00c8 3A       		.uleb128 0x3a
+ 1954 00c9 0B       		.uleb128 0xb
+ 1955 00ca 3B       		.uleb128 0x3b
+ 1956 00cb 05       		.uleb128 0x5
+ 1957 00cc 49       		.uleb128 0x49
+ 1958 00cd 13       		.uleb128 0x13
+ 1959 00ce 38       		.uleb128 0x38
+ 1960 00cf 0B       		.uleb128 0xb
+ 1961 00d0 00       		.byte	0
+ 1962 00d1 00       		.byte	0
+ 1963 00d2 11       		.uleb128 0x11
+ 1964 00d3 26       		.uleb128 0x26
+ 1965 00d4 00       		.byte	0
+ 1966 00d5 49       		.uleb128 0x49
+ 1967 00d6 13       		.uleb128 0x13
+ 1968 00d7 00       		.byte	0
+ 1969 00d8 00       		.byte	0
+ 1970 00d9 12       		.uleb128 0x12
+ 1971 00da 15       		.uleb128 0x15
+ 1972 00db 01       		.byte	0x1
+ 1973 00dc 27       		.uleb128 0x27
+ 1974 00dd 19       		.uleb128 0x19
+ 1975 00de 01       		.uleb128 0x1
+ 1976 00df 13       		.uleb128 0x13
+ 1977 00e0 00       		.byte	0
+ 1978 00e1 00       		.byte	0
+ 1979 00e2 13       		.uleb128 0x13
+ 1980 00e3 05       		.uleb128 0x5
+ 1981 00e4 00       		.byte	0
+ 1982 00e5 49       		.uleb128 0x49
+ 1983 00e6 13       		.uleb128 0x13
+ 1984 00e7 00       		.byte	0
+ 1985 00e8 00       		.byte	0
+ 1986 00e9 14       		.uleb128 0x14
+ 1987 00ea 13       		.uleb128 0x13
+ 1988 00eb 01       		.byte	0x1
+ 1989 00ec 0B       		.uleb128 0xb
+ 1990 00ed 0B       		.uleb128 0xb
+ 1991 00ee 3A       		.uleb128 0x3a
+ 1992 00ef 0B       		.uleb128 0xb
+ 1993 00f0 3B       		.uleb128 0x3b
+ 1994 00f1 05       		.uleb128 0x5
+ 1995 00f2 01       		.uleb128 0x1
+ 1996 00f3 13       		.uleb128 0x13
+ 1997 00f4 00       		.byte	0
+ 1998 00f5 00       		.byte	0
+ 1999 00f6 15       		.uleb128 0x15
+ 2000 00f7 01       		.uleb128 0x1
+ 2001 00f8 01       		.byte	0x1
+ 2002 00f9 49       		.uleb128 0x49
+ 2003 00fa 13       		.uleb128 0x13
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqVWbXA.s 			page 39
+
+
+ 2004 00fb 01       		.uleb128 0x1
+ 2005 00fc 13       		.uleb128 0x13
+ 2006 00fd 00       		.byte	0
+ 2007 00fe 00       		.byte	0
+ 2008 00ff 16       		.uleb128 0x16
+ 2009 0100 21       		.uleb128 0x21
+ 2010 0101 00       		.byte	0
+ 2011 0102 49       		.uleb128 0x49
+ 2012 0103 13       		.uleb128 0x13
+ 2013 0104 2F       		.uleb128 0x2f
+ 2014 0105 0B       		.uleb128 0xb
+ 2015 0106 00       		.byte	0
+ 2016 0107 00       		.byte	0
+ 2017 0108 17       		.uleb128 0x17
+ 2018 0109 2E       		.uleb128 0x2e
+ 2019 010a 01       		.byte	0x1
+ 2020 010b 3F       		.uleb128 0x3f
+ 2021 010c 19       		.uleb128 0x19
+ 2022 010d 03       		.uleb128 0x3
+ 2023 010e 0E       		.uleb128 0xe
+ 2024 010f 3A       		.uleb128 0x3a
+ 2025 0110 0B       		.uleb128 0xb
+ 2026 0111 3B       		.uleb128 0x3b
+ 2027 0112 0B       		.uleb128 0xb
+ 2028 0113 49       		.uleb128 0x49
+ 2029 0114 13       		.uleb128 0x13
+ 2030 0115 20       		.uleb128 0x20
+ 2031 0116 0B       		.uleb128 0xb
+ 2032 0117 01       		.uleb128 0x1
+ 2033 0118 13       		.uleb128 0x13
+ 2034 0119 00       		.byte	0
+ 2035 011a 00       		.byte	0
+ 2036 011b 18       		.uleb128 0x18
+ 2037 011c 34       		.uleb128 0x34
+ 2038 011d 00       		.byte	0
+ 2039 011e 03       		.uleb128 0x3
+ 2040 011f 0E       		.uleb128 0xe
+ 2041 0120 3A       		.uleb128 0x3a
+ 2042 0121 0B       		.uleb128 0xb
+ 2043 0122 3B       		.uleb128 0x3b
+ 2044 0123 0B       		.uleb128 0xb
+ 2045 0124 49       		.uleb128 0x49
+ 2046 0125 13       		.uleb128 0x13
+ 2047 0126 00       		.byte	0
+ 2048 0127 00       		.byte	0
+ 2049 0128 19       		.uleb128 0x19
+ 2050 0129 34       		.uleb128 0x34
+ 2051 012a 00       		.byte	0
+ 2052 012b 03       		.uleb128 0x3
+ 2053 012c 08       		.uleb128 0x8
+ 2054 012d 3A       		.uleb128 0x3a
+ 2055 012e 0B       		.uleb128 0xb
+ 2056 012f 3B       		.uleb128 0x3b
+ 2057 0130 0B       		.uleb128 0xb
+ 2058 0131 49       		.uleb128 0x49
+ 2059 0132 13       		.uleb128 0x13
+ 2060 0133 00       		.byte	0
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqVWbXA.s 			page 40
+
+
+ 2061 0134 00       		.byte	0
+ 2062 0135 1A       		.uleb128 0x1a
+ 2063 0136 2E       		.uleb128 0x2e
+ 2064 0137 01       		.byte	0x1
+ 2065 0138 3F       		.uleb128 0x3f
+ 2066 0139 19       		.uleb128 0x19
+ 2067 013a 03       		.uleb128 0x3
+ 2068 013b 0E       		.uleb128 0xe
+ 2069 013c 3A       		.uleb128 0x3a
+ 2070 013d 0B       		.uleb128 0xb
+ 2071 013e 3B       		.uleb128 0x3b
+ 2072 013f 0B       		.uleb128 0xb
+ 2073 0140 27       		.uleb128 0x27
+ 2074 0141 19       		.uleb128 0x19
+ 2075 0142 20       		.uleb128 0x20
+ 2076 0143 0B       		.uleb128 0xb
+ 2077 0144 01       		.uleb128 0x1
+ 2078 0145 13       		.uleb128 0x13
+ 2079 0146 00       		.byte	0
+ 2080 0147 00       		.byte	0
+ 2081 0148 1B       		.uleb128 0x1b
+ 2082 0149 05       		.uleb128 0x5
+ 2083 014a 00       		.byte	0
+ 2084 014b 03       		.uleb128 0x3
+ 2085 014c 08       		.uleb128 0x8
+ 2086 014d 3A       		.uleb128 0x3a
+ 2087 014e 0B       		.uleb128 0xb
+ 2088 014f 3B       		.uleb128 0x3b
+ 2089 0150 0B       		.uleb128 0xb
+ 2090 0151 49       		.uleb128 0x49
+ 2091 0152 13       		.uleb128 0x13
+ 2092 0153 00       		.byte	0
+ 2093 0154 00       		.byte	0
+ 2094 0155 1C       		.uleb128 0x1c
+ 2095 0156 2E       		.uleb128 0x2e
+ 2096 0157 01       		.byte	0x1
+ 2097 0158 3F       		.uleb128 0x3f
+ 2098 0159 19       		.uleb128 0x19
+ 2099 015a 03       		.uleb128 0x3
+ 2100 015b 0E       		.uleb128 0xe
+ 2101 015c 3A       		.uleb128 0x3a
+ 2102 015d 0B       		.uleb128 0xb
+ 2103 015e 3B       		.uleb128 0x3b
+ 2104 015f 0B       		.uleb128 0xb
+ 2105 0160 27       		.uleb128 0x27
+ 2106 0161 19       		.uleb128 0x19
+ 2107 0162 49       		.uleb128 0x49
+ 2108 0163 13       		.uleb128 0x13
+ 2109 0164 11       		.uleb128 0x11
+ 2110 0165 01       		.uleb128 0x1
+ 2111 0166 12       		.uleb128 0x12
+ 2112 0167 06       		.uleb128 0x6
+ 2113 0168 40       		.uleb128 0x40
+ 2114 0169 18       		.uleb128 0x18
+ 2115 016a 9742     		.uleb128 0x2117
+ 2116 016c 19       		.uleb128 0x19
+ 2117 016d 01       		.uleb128 0x1
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqVWbXA.s 			page 41
+
+
+ 2118 016e 13       		.uleb128 0x13
+ 2119 016f 00       		.byte	0
+ 2120 0170 00       		.byte	0
+ 2121 0171 1D       		.uleb128 0x1d
+ 2122 0172 05       		.uleb128 0x5
+ 2123 0173 00       		.byte	0
+ 2124 0174 03       		.uleb128 0x3
+ 2125 0175 0E       		.uleb128 0xe
+ 2126 0176 3A       		.uleb128 0x3a
+ 2127 0177 0B       		.uleb128 0xb
+ 2128 0178 3B       		.uleb128 0x3b
+ 2129 0179 0B       		.uleb128 0xb
+ 2130 017a 49       		.uleb128 0x49
+ 2131 017b 13       		.uleb128 0x13
+ 2132 017c 02       		.uleb128 0x2
+ 2133 017d 17       		.uleb128 0x17
+ 2134 017e 00       		.byte	0
+ 2135 017f 00       		.byte	0
+ 2136 0180 1E       		.uleb128 0x1e
+ 2137 0181 34       		.uleb128 0x34
+ 2138 0182 00       		.byte	0
+ 2139 0183 03       		.uleb128 0x3
+ 2140 0184 08       		.uleb128 0x8
+ 2141 0185 3A       		.uleb128 0x3a
+ 2142 0186 0B       		.uleb128 0xb
+ 2143 0187 3B       		.uleb128 0x3b
+ 2144 0188 0B       		.uleb128 0xb
+ 2145 0189 49       		.uleb128 0x49
+ 2146 018a 13       		.uleb128 0x13
+ 2147 018b 02       		.uleb128 0x2
+ 2148 018c 18       		.uleb128 0x18
+ 2149 018d 00       		.byte	0
+ 2150 018e 00       		.byte	0
+ 2151 018f 1F       		.uleb128 0x1f
+ 2152 0190 1D       		.uleb128 0x1d
+ 2153 0191 01       		.byte	0x1
+ 2154 0192 31       		.uleb128 0x31
+ 2155 0193 13       		.uleb128 0x13
+ 2156 0194 11       		.uleb128 0x11
+ 2157 0195 01       		.uleb128 0x1
+ 2158 0196 12       		.uleb128 0x12
+ 2159 0197 06       		.uleb128 0x6
+ 2160 0198 58       		.uleb128 0x58
+ 2161 0199 0B       		.uleb128 0xb
+ 2162 019a 59       		.uleb128 0x59
+ 2163 019b 0B       		.uleb128 0xb
+ 2164 019c 01       		.uleb128 0x1
+ 2165 019d 13       		.uleb128 0x13
+ 2166 019e 00       		.byte	0
+ 2167 019f 00       		.byte	0
+ 2168 01a0 20       		.uleb128 0x20
+ 2169 01a1 05       		.uleb128 0x5
+ 2170 01a2 00       		.byte	0
+ 2171 01a3 31       		.uleb128 0x31
+ 2172 01a4 13       		.uleb128 0x13
+ 2173 01a5 02       		.uleb128 0x2
+ 2174 01a6 17       		.uleb128 0x17
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqVWbXA.s 			page 42
+
+
+ 2175 01a7 00       		.byte	0
+ 2176 01a8 00       		.byte	0
+ 2177 01a9 21       		.uleb128 0x21
+ 2178 01aa 0B       		.uleb128 0xb
+ 2179 01ab 01       		.byte	0x1
+ 2180 01ac 11       		.uleb128 0x11
+ 2181 01ad 01       		.uleb128 0x1
+ 2182 01ae 12       		.uleb128 0x12
+ 2183 01af 06       		.uleb128 0x6
+ 2184 01b0 00       		.byte	0
+ 2185 01b1 00       		.byte	0
+ 2186 01b2 22       		.uleb128 0x22
+ 2187 01b3 34       		.uleb128 0x34
+ 2188 01b4 00       		.byte	0
+ 2189 01b5 31       		.uleb128 0x31
+ 2190 01b6 13       		.uleb128 0x13
+ 2191 01b7 02       		.uleb128 0x2
+ 2192 01b8 17       		.uleb128 0x17
+ 2193 01b9 00       		.byte	0
+ 2194 01ba 00       		.byte	0
+ 2195 01bb 23       		.uleb128 0x23
+ 2196 01bc 898201   		.uleb128 0x4109
+ 2197 01bf 01       		.byte	0x1
+ 2198 01c0 11       		.uleb128 0x11
+ 2199 01c1 01       		.uleb128 0x1
+ 2200 01c2 31       		.uleb128 0x31
+ 2201 01c3 13       		.uleb128 0x13
+ 2202 01c4 01       		.uleb128 0x1
+ 2203 01c5 13       		.uleb128 0x13
+ 2204 01c6 00       		.byte	0
+ 2205 01c7 00       		.byte	0
+ 2206 01c8 24       		.uleb128 0x24
+ 2207 01c9 8A8201   		.uleb128 0x410a
+ 2208 01cc 00       		.byte	0
+ 2209 01cd 02       		.uleb128 0x2
+ 2210 01ce 18       		.uleb128 0x18
+ 2211 01cf 9142     		.uleb128 0x2111
+ 2212 01d1 18       		.uleb128 0x18
+ 2213 01d2 00       		.byte	0
+ 2214 01d3 00       		.byte	0
+ 2215 01d4 25       		.uleb128 0x25
+ 2216 01d5 898201   		.uleb128 0x4109
+ 2217 01d8 01       		.byte	0x1
+ 2218 01d9 11       		.uleb128 0x11
+ 2219 01da 01       		.uleb128 0x1
+ 2220 01db 31       		.uleb128 0x31
+ 2221 01dc 13       		.uleb128 0x13
+ 2222 01dd 00       		.byte	0
+ 2223 01de 00       		.byte	0
+ 2224 01df 26       		.uleb128 0x26
+ 2225 01e0 898201   		.uleb128 0x4109
+ 2226 01e3 00       		.byte	0
+ 2227 01e4 11       		.uleb128 0x11
+ 2228 01e5 01       		.uleb128 0x1
+ 2229 01e6 31       		.uleb128 0x31
+ 2230 01e7 13       		.uleb128 0x13
+ 2231 01e8 00       		.byte	0
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqVWbXA.s 			page 43
+
+
+ 2232 01e9 00       		.byte	0
+ 2233 01ea 27       		.uleb128 0x27
+ 2234 01eb 2E       		.uleb128 0x2e
+ 2235 01ec 01       		.byte	0x1
+ 2236 01ed 3F       		.uleb128 0x3f
+ 2237 01ee 19       		.uleb128 0x19
+ 2238 01ef 03       		.uleb128 0x3
+ 2239 01f0 0E       		.uleb128 0xe
+ 2240 01f1 3A       		.uleb128 0x3a
+ 2241 01f2 0B       		.uleb128 0xb
+ 2242 01f3 3B       		.uleb128 0x3b
+ 2243 01f4 0B       		.uleb128 0xb
+ 2244 01f5 27       		.uleb128 0x27
+ 2245 01f6 19       		.uleb128 0x19
+ 2246 01f7 11       		.uleb128 0x11
+ 2247 01f8 01       		.uleb128 0x1
+ 2248 01f9 12       		.uleb128 0x12
+ 2249 01fa 06       		.uleb128 0x6
+ 2250 01fb 40       		.uleb128 0x40
+ 2251 01fc 18       		.uleb128 0x18
+ 2252 01fd 9742     		.uleb128 0x2117
+ 2253 01ff 19       		.uleb128 0x19
+ 2254 0200 01       		.uleb128 0x1
+ 2255 0201 13       		.uleb128 0x13
+ 2256 0202 00       		.byte	0
+ 2257 0203 00       		.byte	0
+ 2258 0204 28       		.uleb128 0x28
+ 2259 0205 05       		.uleb128 0x5
+ 2260 0206 00       		.byte	0
+ 2261 0207 03       		.uleb128 0x3
+ 2262 0208 08       		.uleb128 0x8
+ 2263 0209 3A       		.uleb128 0x3a
+ 2264 020a 0B       		.uleb128 0xb
+ 2265 020b 3B       		.uleb128 0x3b
+ 2266 020c 0B       		.uleb128 0xb
+ 2267 020d 49       		.uleb128 0x49
+ 2268 020e 13       		.uleb128 0x13
+ 2269 020f 02       		.uleb128 0x2
+ 2270 0210 17       		.uleb128 0x17
+ 2271 0211 00       		.byte	0
+ 2272 0212 00       		.byte	0
+ 2273 0213 29       		.uleb128 0x29
+ 2274 0214 34       		.uleb128 0x34
+ 2275 0215 00       		.byte	0
+ 2276 0216 03       		.uleb128 0x3
+ 2277 0217 08       		.uleb128 0x8
+ 2278 0218 3A       		.uleb128 0x3a
+ 2279 0219 0B       		.uleb128 0xb
+ 2280 021a 3B       		.uleb128 0x3b
+ 2281 021b 0B       		.uleb128 0xb
+ 2282 021c 49       		.uleb128 0x49
+ 2283 021d 13       		.uleb128 0x13
+ 2284 021e 02       		.uleb128 0x2
+ 2285 021f 17       		.uleb128 0x17
+ 2286 0220 00       		.byte	0
+ 2287 0221 00       		.byte	0
+ 2288 0222 2A       		.uleb128 0x2a
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqVWbXA.s 			page 44
+
+
+ 2289 0223 34       		.uleb128 0x34
+ 2290 0224 00       		.byte	0
+ 2291 0225 03       		.uleb128 0x3
+ 2292 0226 0E       		.uleb128 0xe
+ 2293 0227 3A       		.uleb128 0x3a
+ 2294 0228 0B       		.uleb128 0xb
+ 2295 0229 3B       		.uleb128 0x3b
+ 2296 022a 0B       		.uleb128 0xb
+ 2297 022b 49       		.uleb128 0x49
+ 2298 022c 13       		.uleb128 0x13
+ 2299 022d 02       		.uleb128 0x2
+ 2300 022e 17       		.uleb128 0x17
+ 2301 022f 00       		.byte	0
+ 2302 0230 00       		.byte	0
+ 2303 0231 2B       		.uleb128 0x2b
+ 2304 0232 34       		.uleb128 0x34
+ 2305 0233 00       		.byte	0
+ 2306 0234 03       		.uleb128 0x3
+ 2307 0235 0E       		.uleb128 0xe
+ 2308 0236 3A       		.uleb128 0x3a
+ 2309 0237 0B       		.uleb128 0xb
+ 2310 0238 3B       		.uleb128 0x3b
+ 2311 0239 05       		.uleb128 0x5
+ 2312 023a 49       		.uleb128 0x49
+ 2313 023b 13       		.uleb128 0x13
+ 2314 023c 3F       		.uleb128 0x3f
+ 2315 023d 19       		.uleb128 0x19
+ 2316 023e 3C       		.uleb128 0x3c
+ 2317 023f 19       		.uleb128 0x19
+ 2318 0240 00       		.byte	0
+ 2319 0241 00       		.byte	0
+ 2320 0242 2C       		.uleb128 0x2c
+ 2321 0243 35       		.uleb128 0x35
+ 2322 0244 00       		.byte	0
+ 2323 0245 49       		.uleb128 0x49
+ 2324 0246 13       		.uleb128 0x13
+ 2325 0247 00       		.byte	0
+ 2326 0248 00       		.byte	0
+ 2327 0249 2D       		.uleb128 0x2d
+ 2328 024a 34       		.uleb128 0x34
+ 2329 024b 00       		.byte	0
+ 2330 024c 03       		.uleb128 0x3
+ 2331 024d 0E       		.uleb128 0xe
+ 2332 024e 3A       		.uleb128 0x3a
+ 2333 024f 0B       		.uleb128 0xb
+ 2334 0250 3B       		.uleb128 0x3b
+ 2335 0251 0B       		.uleb128 0xb
+ 2336 0252 49       		.uleb128 0x49
+ 2337 0253 13       		.uleb128 0x13
+ 2338 0254 3F       		.uleb128 0x3f
+ 2339 0255 19       		.uleb128 0x19
+ 2340 0256 02       		.uleb128 0x2
+ 2341 0257 18       		.uleb128 0x18
+ 2342 0258 00       		.byte	0
+ 2343 0259 00       		.byte	0
+ 2344 025a 2E       		.uleb128 0x2e
+ 2345 025b 2E       		.uleb128 0x2e
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqVWbXA.s 			page 45
+
+
+ 2346 025c 00       		.byte	0
+ 2347 025d 3F       		.uleb128 0x3f
+ 2348 025e 19       		.uleb128 0x19
+ 2349 025f 3C       		.uleb128 0x3c
+ 2350 0260 19       		.uleb128 0x19
+ 2351 0261 6E       		.uleb128 0x6e
+ 2352 0262 0E       		.uleb128 0xe
+ 2353 0263 03       		.uleb128 0x3
+ 2354 0264 0E       		.uleb128 0xe
+ 2355 0265 3A       		.uleb128 0x3a
+ 2356 0266 0B       		.uleb128 0xb
+ 2357 0267 3B       		.uleb128 0x3b
+ 2358 0268 0B       		.uleb128 0xb
+ 2359 0269 00       		.byte	0
+ 2360 026a 00       		.byte	0
+ 2361 026b 00       		.byte	0
+ 2362              		.section	.debug_loc,"",%progbits
+ 2363              	.Ldebug_loc0:
+ 2364              	.LLST0:
+ 2365 0000 00000000 		.4byte	.LVL0
+ 2366 0004 06000000 		.4byte	.LVL1
+ 2367 0008 0100     		.2byte	0x1
+ 2368 000a 50       		.byte	0x50
+ 2369 000b 06000000 		.4byte	.LVL1
+ 2370 000f A2000000 		.4byte	.LFE65
+ 2371 0013 0400     		.2byte	0x4
+ 2372 0015 F3       		.byte	0xf3
+ 2373 0016 01       		.uleb128 0x1
+ 2374 0017 50       		.byte	0x50
+ 2375 0018 9F       		.byte	0x9f
+ 2376 0019 00000000 		.4byte	0
+ 2377 001d 00000000 		.4byte	0
+ 2378              	.LLST1:
+ 2379 0021 0C000000 		.4byte	.LVL3
+ 2380 0025 44000000 		.4byte	.LVL12
+ 2381 0029 0100     		.2byte	0x1
+ 2382 002b 54       		.byte	0x54
+ 2383 002c 46000000 		.4byte	.LVL13
+ 2384 0030 4E000000 		.4byte	.LVL16
+ 2385 0034 0100     		.2byte	0x1
+ 2386 0036 54       		.byte	0x54
+ 2387 0037 00000000 		.4byte	0
+ 2388 003b 00000000 		.4byte	0
+ 2389              	.LLST2:
+ 2390 003f 0C000000 		.4byte	.LVL3
+ 2391 0043 16000000 		.4byte	.LVL5
+ 2392 0047 0200     		.2byte	0x2
+ 2393 0049 30       		.byte	0x30
+ 2394 004a 9F       		.byte	0x9f
+ 2395 004b 16000000 		.4byte	.LVL5
+ 2396 004f 48000000 		.4byte	.LVL14
+ 2397 0053 0100     		.2byte	0x1
+ 2398 0055 55       		.byte	0x55
+ 2399 0056 4A000000 		.4byte	.LVL15
+ 2400 005a 4E000000 		.4byte	.LVL16
+ 2401 005e 0100     		.2byte	0x1
+ 2402 0060 55       		.byte	0x55
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqVWbXA.s 			page 46
+
+
+ 2403 0061 00000000 		.4byte	0
+ 2404 0065 00000000 		.4byte	0
+ 2405              	.LLST3:
+ 2406 0069 6C000000 		.4byte	.LVL21
+ 2407 006d 92000000 		.4byte	.LVL30
+ 2408 0071 0100     		.2byte	0x1
+ 2409 0073 55       		.byte	0x55
+ 2410 0074 94000000 		.4byte	.LVL31
+ 2411 0078 98000000 		.4byte	.LVL32
+ 2412 007c 0100     		.2byte	0x1
+ 2413 007e 55       		.byte	0x55
+ 2414 007f 00000000 		.4byte	0
+ 2415 0083 00000000 		.4byte	0
+ 2416              	.LLST4:
+ 2417 0087 6C000000 		.4byte	.LVL21
+ 2418 008b 6E000000 		.4byte	.LVL22
+ 2419 008f 0100     		.2byte	0x1
+ 2420 0091 54       		.byte	0x54
+ 2421 0092 70000000 		.4byte	.LVL23
+ 2422 0096 98000000 		.4byte	.LVL32
+ 2423 009a 0100     		.2byte	0x1
+ 2424 009c 54       		.byte	0x54
+ 2425 009d 00000000 		.4byte	0
+ 2426 00a1 00000000 		.4byte	0
+ 2427              	.LLST5:
+ 2428 00a5 00000000 		.4byte	.LVL36
+ 2429 00a9 0A000000 		.4byte	.LVL38
+ 2430 00ad 0100     		.2byte	0x1
+ 2431 00af 50       		.byte	0x50
+ 2432 00b0 0A000000 		.4byte	.LVL38
+ 2433 00b4 CE000000 		.4byte	.LVL63
+ 2434 00b8 0100     		.2byte	0x1
+ 2435 00ba 59       		.byte	0x59
+ 2436 00bb CE000000 		.4byte	.LVL63
+ 2437 00bf D8000000 		.4byte	.LFE67
+ 2438 00c3 0400     		.2byte	0x4
+ 2439 00c5 F3       		.byte	0xf3
+ 2440 00c6 01       		.uleb128 0x1
+ 2441 00c7 50       		.byte	0x50
+ 2442 00c8 9F       		.byte	0x9f
+ 2443 00c9 00000000 		.4byte	0
+ 2444 00cd 00000000 		.4byte	0
+ 2445              	.LLST6:
+ 2446 00d1 00000000 		.4byte	.LVL36
+ 2447 00d5 0A000000 		.4byte	.LVL38
+ 2448 00d9 0100     		.2byte	0x1
+ 2449 00db 51       		.byte	0x51
+ 2450 00dc 0A000000 		.4byte	.LVL38
+ 2451 00e0 CE000000 		.4byte	.LVL63
+ 2452 00e4 0100     		.2byte	0x1
+ 2453 00e6 58       		.byte	0x58
+ 2454 00e7 CE000000 		.4byte	.LVL63
+ 2455 00eb D8000000 		.4byte	.LFE67
+ 2456 00ef 0400     		.2byte	0x4
+ 2457 00f1 F3       		.byte	0xf3
+ 2458 00f2 01       		.uleb128 0x1
+ 2459 00f3 51       		.byte	0x51
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqVWbXA.s 			page 47
+
+
+ 2460 00f4 9F       		.byte	0x9f
+ 2461 00f5 00000000 		.4byte	0
+ 2462 00f9 00000000 		.4byte	0
+ 2463              	.LLST7:
+ 2464 00fd 2E000000 		.4byte	.LVL46
+ 2465 0101 3E000000 		.4byte	.LVL50
+ 2466 0105 0100     		.2byte	0x1
+ 2467 0107 54       		.byte	0x54
+ 2468 0108 00000000 		.4byte	0
+ 2469 010c 00000000 		.4byte	0
+ 2470              	.LLST8:
+ 2471 0110 18000000 		.4byte	.LVL41
+ 2472 0114 CE000000 		.4byte	.LVL63
+ 2473 0118 0100     		.2byte	0x1
+ 2474 011a 57       		.byte	0x57
+ 2475 011b 00000000 		.4byte	0
+ 2476 011f 00000000 		.4byte	0
+ 2477              	.LLST9:
+ 2478 0123 34000000 		.4byte	.LVL47
+ 2479 0127 A8000000 		.4byte	.LVL58
+ 2480 012b 0100     		.2byte	0x1
+ 2481 012d 50       		.byte	0x50
+ 2482 012e C8000000 		.4byte	.LVL61
+ 2483 0132 CA000000 		.4byte	.LVL62
+ 2484 0136 0100     		.2byte	0x1
+ 2485 0138 50       		.byte	0x50
+ 2486 0139 00000000 		.4byte	0
+ 2487 013d 00000000 		.4byte	0
+ 2488              	.LLST10:
+ 2489 0141 20000000 		.4byte	.LVL43
+ 2490 0145 62000000 		.4byte	.LVL52
+ 2491 0149 0100     		.2byte	0x1
+ 2492 014b 56       		.byte	0x56
+ 2493 014c C8000000 		.4byte	.LVL61
+ 2494 0150 CE000000 		.4byte	.LVL63
+ 2495 0154 0100     		.2byte	0x1
+ 2496 0156 56       		.byte	0x56
+ 2497 0157 00000000 		.4byte	0
+ 2498 015b 00000000 		.4byte	0
+ 2499              	.LLST11:
+ 2500 015f 60000000 		.4byte	.LVL51
+ 2501 0163 7A000000 		.4byte	.LVL54
+ 2502 0167 0500     		.2byte	0x5
+ 2503 0169 72       		.byte	0x72
+ 2504 016a 00       		.sleb128 0
+ 2505 016b 31       		.byte	0x31
+ 2506 016c 26       		.byte	0x26
+ 2507 016d 9F       		.byte	0x9f
+ 2508 016e 7A000000 		.4byte	.LVL54
+ 2509 0172 84000000 		.4byte	.LVL55
+ 2510 0176 1000     		.2byte	0x10
+ 2511 0178 70       		.byte	0x70
+ 2512 0179 00       		.sleb128 0
+ 2513 017a 71       		.byte	0x71
+ 2514 017b 00       		.sleb128 0
+ 2515 017c 22       		.byte	0x22
+ 2516 017d 4F       		.byte	0x4f
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqVWbXA.s 			page 48
+
+
+ 2517 017e 25       		.byte	0x25
+ 2518 017f 70       		.byte	0x70
+ 2519 0180 00       		.sleb128 0
+ 2520 0181 22       		.byte	0x22
+ 2521 0182 71       		.byte	0x71
+ 2522 0183 00       		.sleb128 0
+ 2523 0184 22       		.byte	0x22
+ 2524 0185 31       		.byte	0x31
+ 2525 0186 26       		.byte	0x26
+ 2526 0187 9F       		.byte	0x9f
+ 2527 0188 00000000 		.4byte	0
+ 2528 018c 00000000 		.4byte	0
+ 2529              	.LLST12:
+ 2530 0190 70000000 		.4byte	.LVL53
+ 2531 0194 C8000000 		.4byte	.LVL61
+ 2532 0198 0100     		.2byte	0x1
+ 2533 019a 56       		.byte	0x56
+ 2534 019b 00000000 		.4byte	0
+ 2535 019f 00000000 		.4byte	0
+ 2536              	.LLST13:
+ 2537 01a3 8E000000 		.4byte	.LVL56
+ 2538 01a7 C8000000 		.4byte	.LVL61
+ 2539 01ab 0100     		.2byte	0x1
+ 2540 01ad 53       		.byte	0x53
+ 2541 01ae 00000000 		.4byte	0
+ 2542 01b2 00000000 		.4byte	0
+ 2543              	.LLST14:
+ 2544 01b6 B0000000 		.4byte	.LVL59
+ 2545 01ba C8000000 		.4byte	.LVL61
+ 2546 01be 0100     		.2byte	0x1
+ 2547 01c0 52       		.byte	0x52
+ 2548 01c1 00000000 		.4byte	0
+ 2549 01c5 00000000 		.4byte	0
+ 2550              	.LLST15:
+ 2551 01c9 08000000 		.4byte	.LVL37
+ 2552 01cd 0A000000 		.4byte	.LVL38
+ 2553 01d1 0200     		.2byte	0x2
+ 2554 01d3 30       		.byte	0x30
+ 2555 01d4 9F       		.byte	0x9f
+ 2556 01d5 0A000000 		.4byte	.LVL38
+ 2557 01d9 36000000 		.4byte	.LVL48
+ 2558 01dd 0100     		.2byte	0x1
+ 2559 01df 55       		.byte	0x55
+ 2560 01e0 38000000 		.4byte	.LVL49
+ 2561 01e4 CE000000 		.4byte	.LVL63
+ 2562 01e8 0100     		.2byte	0x1
+ 2563 01ea 55       		.byte	0x55
+ 2564 01eb 00000000 		.4byte	0
+ 2565 01ef 00000000 		.4byte	0
+ 2566              		.section	.debug_aranges,"",%progbits
+ 2567 0000 34000000 		.4byte	0x34
+ 2568 0004 0200     		.2byte	0x2
+ 2569 0006 00000000 		.4byte	.Ldebug_info0
+ 2570 000a 04       		.byte	0x4
+ 2571 000b 00       		.byte	0
+ 2572 000c 0000     		.2byte	0
+ 2573 000e 0000     		.2byte	0
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqVWbXA.s 			page 49
+
+
+ 2574 0010 00000000 		.4byte	.LFB65
+ 2575 0014 A2000000 		.4byte	.LFE65-.LFB65
+ 2576 0018 00000000 		.4byte	.LFB66
+ 2577 001c 10000000 		.4byte	.LFE66-.LFB66
+ 2578 0020 00000000 		.4byte	.LFB67
+ 2579 0024 D8000000 		.4byte	.LFE67-.LFB67
+ 2580 0028 00000000 		.4byte	.LFB68
+ 2581 002c 16000000 		.4byte	.LFE68-.LFB68
+ 2582 0030 00000000 		.4byte	0
+ 2583 0034 00000000 		.4byte	0
+ 2584              		.section	.debug_ranges,"",%progbits
+ 2585              	.Ldebug_ranges0:
+ 2586 0000 00000000 		.4byte	.LFB65
+ 2587 0004 A2000000 		.4byte	.LFE65
+ 2588 0008 00000000 		.4byte	.LFB66
+ 2589 000c 10000000 		.4byte	.LFE66
+ 2590 0010 00000000 		.4byte	.LFB67
+ 2591 0014 D8000000 		.4byte	.LFE67
+ 2592 0018 00000000 		.4byte	.LFB68
+ 2593 001c 16000000 		.4byte	.LFE68
+ 2594 0020 00000000 		.4byte	0
+ 2595 0024 00000000 		.4byte	0
+ 2596              		.section	.debug_line,"",%progbits
+ 2597              	.Ldebug_line0:
+ 2598 0000 CF020000 		.section	.debug_str,"MS",%progbits,1
+ 2598      02001D02 
+ 2598      00000201 
+ 2598      FB0E0D00 
+ 2598      01010101 
+ 2599              	.LASF106:
+ 2600 0000 43794465 		.ascii	"CyDelay\000"
+ 2600      6C617900 
+ 2601              	.LASF31:
+ 2602 0008 464F4E54 		.ascii	"FONT_TYPE_8BPP\000"
+ 2602      5F545950 
+ 2602      455F3842 
+ 2602      505000
+ 2603              	.LASF87:
+ 2604 0017 6465736B 		.ascii	"desktop_color\000"
+ 2604      746F705F 
+ 2604      636F6C6F 
+ 2604      7200
+ 2605              	.LASF108:
+ 2606 0025 546F7563 		.ascii	"Touch_Controller\\XPT2046.c\000"
+ 2606      685F436F 
+ 2606      6E74726F 
+ 2606      6C6C6572 
+ 2606      5C585054 
+ 2607              	.LASF93:
+ 2608 0040 58505432 		.ascii	"XPT2046_ReadXY\000"
+ 2608      3034365F 
+ 2608      52656164 
+ 2608      585900
+ 2609              	.LASF42:
+ 2610 004f 746F7563 		.ascii	"touch_state\000"
+ 2610      685F7374 
+ 2610      61746500 
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqVWbXA.s 			page 50
+
+
+ 2611              	.LASF56:
+ 2612 005b 55475F43 		.ascii	"UG_COLOR\000"
+ 2612      4F4C4F52 
+ 2612      00
+ 2613              	.LASF28:
+ 2614 0064 55475F55 		.ascii	"UG_U16\000"
+ 2614      313600
+ 2615              	.LASF13:
+ 2616 006b 756E7369 		.ascii	"unsigned int\000"
+ 2616      676E6564 
+ 2616      20696E74 
+ 2616      00
+ 2617              	.LASF86:
+ 2618 0078 63686172 		.ascii	"char_v_space\000"
+ 2618      5F765F73 
+ 2618      70616365 
+ 2618      00
+ 2619              	.LASF104:
+ 2620 0085 545F444F 		.ascii	"T_DO_Read\000"
+ 2620      5F526561 
+ 2620      6400
+ 2621              	.LASF94:
+ 2622 008f 636F6F72 		.ascii	"coord\000"
+ 2622      6400
+ 2623              	.LASF8:
+ 2624 0095 5F5F696E 		.ascii	"__int32_t\000"
+ 2624      7433325F 
+ 2624      7400
+ 2625              	.LASF84:
+ 2626 009f 636F6E73 		.ascii	"console\000"
+ 2626      6F6C6500 
+ 2627              	.LASF51:
+ 2628 00a7 535F5749 		.ascii	"S_WINDOW\000"
+ 2628      4E444F57 
+ 2628      00
+ 2629              	.LASF43:
+ 2630 00b0 75706461 		.ascii	"update\000"
+ 2630      746500
+ 2631              	.LASF79:
+ 2632 00b7 795F6469 		.ascii	"y_dim\000"
+ 2632      6D00
+ 2633              	.LASF32:
+ 2634 00bd 464F4E54 		.ascii	"FONT_TYPE\000"
+ 2634      5F545950 
+ 2634      4500
+ 2635              	.LASF53:
+ 2636 00c7 6F626A6C 		.ascii	"objlst\000"
+ 2636      737400
+ 2637              	.LASF81:
+ 2638 00ce 6E657874 		.ascii	"next_window\000"
+ 2638      5F77696E 
+ 2638      646F7700 
+ 2639              	.LASF55:
+ 2640 00da 7469746C 		.ascii	"title\000"
+ 2640      6500
+ 2641              	.LASF14:
+ 2642 00e0 696E7438 		.ascii	"int8_t\000"
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqVWbXA.s 			page 51
+
+
+ 2642      5F7400
+ 2643              	.LASF73:
+ 2644 00e7 785F656E 		.ascii	"x_end\000"
+ 2644      6400
+ 2645              	.LASF21:
+ 2646 00ed 666C6F61 		.ascii	"float\000"
+ 2646      7400
+ 2647              	.LASF47:
+ 2648 00f3 6576656E 		.ascii	"event\000"
+ 2648      7400
+ 2649              	.LASF83:
+ 2650 00f9 6C617374 		.ascii	"last_window\000"
+ 2650      5F77696E 
+ 2650      646F7700 
+ 2651              	.LASF76:
+ 2652 0105 6261636B 		.ascii	"back_color\000"
+ 2652      5F636F6C 
+ 2652      6F7200
+ 2653              	.LASF89:
+ 2654 0110 636F756E 		.ascii	"count\000"
+ 2654      7400
+ 2655              	.LASF16:
+ 2656 0116 696E7431 		.ascii	"int16_t\000"
+ 2656      365F7400 
+ 2657              	.LASF12:
+ 2658 011e 6C6F6E67 		.ascii	"long long unsigned int\000"
+ 2658      206C6F6E 
+ 2658      6720756E 
+ 2658      7369676E 
+ 2658      65642069 
+ 2659              	.LASF6:
+ 2660 0135 5F5F7569 		.ascii	"__uint16_t\000"
+ 2660      6E743136 
+ 2660      5F7400
+ 2661              	.LASF82:
+ 2662 0140 61637469 		.ascii	"active_window\000"
+ 2662      76655F77 
+ 2662      696E646F 
+ 2662      7700
+ 2663              	.LASF52:
+ 2664 014e 6F626A63 		.ascii	"objcnt\000"
+ 2664      6E7400
+ 2665              	.LASF29:
+ 2666 0155 55475F53 		.ascii	"UG_S16\000"
+ 2666      313600
+ 2667              	.LASF75:
+ 2668 015c 666F7265 		.ascii	"fore_color\000"
+ 2668      5F636F6C 
+ 2668      6F7200
+ 2669              	.LASF70:
+ 2670 0167 795F706F 		.ascii	"y_pos\000"
+ 2670      7300
+ 2671              	.LASF92:
+ 2672 016d 58505432 		.ascii	"XPT2046_ReadPos\000"
+ 2672      3034365F 
+ 2672      52656164 
+ 2672      506F7300 
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqVWbXA.s 			page 52
+
+
+ 2673              	.LASF107:
+ 2674 017d 474E5520 		.ascii	"GNU C11 5.4.1 20160609 (release) [ARM/embedded-5-br"
+ 2674      43313120 
+ 2674      352E342E 
+ 2674      31203230 
+ 2674      31363036 
+ 2675 01b0 616E6368 		.ascii	"anch revision 237715] -mcpu=cortex-m3 -mthumb -g -O"
+ 2675      20726576 
+ 2675      6973696F 
+ 2675      6E203233 
+ 2675      37373135 
+ 2676 01e3 67202D66 		.ascii	"g -ffunction-sections -ffat-lto-objects -finline-fu"
+ 2676      66756E63 
+ 2676      74696F6E 
+ 2676      2D736563 
+ 2676      74696F6E 
+ 2677 0216 6E637469 		.ascii	"nctions\000"
+ 2677      6F6E7300 
+ 2678              	.LASF34:
+ 2679 021e 63686172 		.ascii	"char_width\000"
+ 2679      5F776964 
+ 2679      746800
+ 2680              	.LASF98:
+ 2681 0229 506F7358 		.ascii	"PosX\000"
+ 2681      00
+ 2682              	.LASF99:
+ 2683 022e 506F7359 		.ascii	"PosY\000"
+ 2683      00
+ 2684              	.LASF105:
+ 2685 0233 545F4353 		.ascii	"T_CS_Write\000"
+ 2685      5F577269 
+ 2685      746500
+ 2686              	.LASF72:
+ 2687 023e 795F7374 		.ascii	"y_start\000"
+ 2687      61727400 
+ 2688              	.LASF63:
+ 2689 0246 765F7370 		.ascii	"v_space\000"
+ 2689      61636500 
+ 2690              	.LASF23:
+ 2691 024e 63686172 		.ascii	"char\000"
+ 2691      00
+ 2692              	.LASF103:
+ 2693 0253 43794465 		.ascii	"CyDelayCycles\000"
+ 2693      6C617943 
+ 2693      79636C65 
+ 2693      7300
+ 2694              	.LASF33:
+ 2695 0261 666F6E74 		.ascii	"font_type\000"
+ 2695      5F747970 
+ 2695      6500
+ 2696              	.LASF57:
+ 2697 026b 55475F41 		.ascii	"UG_AREA\000"
+ 2697      52454100 
+ 2698              	.LASF59:
+ 2699 0273 55475F4D 		.ascii	"UG_MESSAGE\000"
+ 2699      45535341 
+ 2699      474500
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqVWbXA.s 			page 53
+
+
+ 2700              	.LASF20:
+ 2701 027e 75696E74 		.ascii	"uint16\000"
+ 2701      313600
+ 2702              	.LASF48:
+ 2703 0285 64617461 		.ascii	"data\000"
+ 2703      00
+ 2704              	.LASF96:
+ 2705 028a 58505432 		.ascii	"XPT2046_ReadZ\000"
+ 2705      3034365F 
+ 2705      52656164 
+ 2705      5A00
+ 2706              	.LASF15:
+ 2707 0298 75696E74 		.ascii	"uint8_t\000"
+ 2707      385F7400 
+ 2708              	.LASF80:
+ 2709 02a0 746F7563 		.ascii	"touch\000"
+ 2709      6800
+ 2710              	.LASF67:
+ 2711 02a6 64726976 		.ascii	"driver\000"
+ 2711      657200
+ 2712              	.LASF27:
+ 2713 02ad 55475F53 		.ascii	"UG_S8\000"
+ 2713      3800
+ 2714              	.LASF78:
+ 2715 02b3 785F6469 		.ascii	"x_dim\000"
+ 2715      6D00
+ 2716              	.LASF11:
+ 2717 02b9 6C6F6E67 		.ascii	"long long int\000"
+ 2717      206C6F6E 
+ 2717      6720696E 
+ 2717      7400
+ 2718              	.LASF4:
+ 2719 02c7 5F5F696E 		.ascii	"__int16_t\000"
+ 2719      7431365F 
+ 2719      7400
+ 2720              	.LASF40:
+ 2721 02d1 55475F4F 		.ascii	"UG_OBJECT\000"
+ 2721      424A4543 
+ 2721      5400
+ 2722              	.LASF77:
+ 2723 02db 70736574 		.ascii	"pset\000"
+ 2723      00
+ 2724              	.LASF58:
+ 2725 02e0 7375625F 		.ascii	"sub_id\000"
+ 2725      696400
+ 2726              	.LASF65:
+ 2727 02e7 68656967 		.ascii	"height\000"
+ 2727      687400
+ 2728              	.LASF36:
+ 2729 02ee 73746172 		.ascii	"start_char\000"
+ 2729      745F6368 
+ 2729      617200
+ 2730              	.LASF90:
+ 2731 02f9 52656164 		.ascii	"Read_2046\000"
+ 2731      5F323034 
+ 2731      3600
+ 2732              	.LASF26:
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqVWbXA.s 			page 54
+
+
+ 2733 0303 55475F55 		.ascii	"UG_U8\000"
+ 2733      3800
+ 2734              	.LASF0:
+ 2735 0309 5F5F696E 		.ascii	"__int8_t\000"
+ 2735      74385F74 
+ 2735      00
+ 2736              	.LASF38:
+ 2737 0312 77696474 		.ascii	"widths\000"
+ 2737      687300
+ 2738              	.LASF24:
+ 2739 0319 6C6F6E67 		.ascii	"long double\000"
+ 2739      20646F75 
+ 2739      626C6500 
+ 2740              	.LASF17:
+ 2741 0325 75696E74 		.ascii	"uint16_t\000"
+ 2741      31365F74 
+ 2741      00
+ 2742              	.LASF100:
+ 2743 032e 67756931 		.ascii	"gui1963\000"
+ 2743      39363300 
+ 2744              	.LASF66:
+ 2745 0336 55475F54 		.ascii	"UG_TITLE\000"
+ 2745      49544C45 
+ 2745      00
+ 2746              	.LASF95:
+ 2747 033f 74696D65 		.ascii	"timeout\000"
+ 2747      6F757400 
+ 2748              	.LASF68:
+ 2749 0347 55475F44 		.ascii	"UG_DRIVER\000"
+ 2749      52495645 
+ 2749      5200
+ 2750              	.LASF69:
+ 2751 0351 785F706F 		.ascii	"x_pos\000"
+ 2751      7300
+ 2752              	.LASF35:
+ 2753 0357 63686172 		.ascii	"char_height\000"
+ 2753      5F686569 
+ 2753      67687400 
+ 2754              	.LASF5:
+ 2755 0363 73686F72 		.ascii	"short int\000"
+ 2755      7420696E 
+ 2755      7400
+ 2756              	.LASF9:
+ 2757 036d 6C6F6E67 		.ascii	"long int\000"
+ 2757      20696E74 
+ 2757      00
+ 2758              	.LASF49:
+ 2759 0376 55475F57 		.ascii	"UG_WINDOW\000"
+ 2759      494E444F 
+ 2759      5700
+ 2760              	.LASF97:
+ 2761 0380 49544D5F 		.ascii	"ITM_RxBuffer\000"
+ 2761      52784275 
+ 2761      66666572 
+ 2761      00
+ 2762              	.LASF110:
+ 2763 038d 58505432 		.ascii	"XPT2046_Start\000"
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqVWbXA.s 			page 55
+
+
+ 2763      3034365F 
+ 2763      53746172 
+ 2763      7400
+ 2764              	.LASF109:
+ 2765 039b 443A5C47 		.ascii	"D:\\GitHub\\PSoC5_uGUI_SD_Sample\\PSoC_Project\\TFT"
+ 2765      69744875 
+ 2765      625C5053 
+ 2765      6F43355F 
+ 2765      75475549 
+ 2766 03ca 5F746573 		.ascii	"_test.cydsn\000"
+ 2766      742E6379 
+ 2766      64736E00 
+ 2767              	.LASF102:
+ 2768 03d6 545F4449 		.ascii	"T_DIN_Write\000"
+ 2768      4E5F5772 
+ 2768      69746500 
+ 2769              	.LASF37:
+ 2770 03e2 656E645F 		.ascii	"end_char\000"
+ 2770      63686172 
+ 2770      00
+ 2771              	.LASF39:
+ 2772 03eb 55475F46 		.ascii	"UG_FONT\000"
+ 2772      4F4E5400 
+ 2773              	.LASF1:
+ 2774 03f3 5F5F7569 		.ascii	"__uint8_t\000"
+ 2774      6E74385F 
+ 2774      7400
+ 2775              	.LASF101:
+ 2776 03fd 545F434C 		.ascii	"T_CLK_Write\000"
+ 2776      4B5F5772 
+ 2776      69746500 
+ 2777              	.LASF61:
+ 2778 0409 666F6E74 		.ascii	"font\000"
+ 2778      00
+ 2779              	.LASF25:
+ 2780 040e 73697A65 		.ascii	"sizetype\000"
+ 2780      74797065 
+ 2780      00
+ 2781              	.LASF10:
+ 2782 0417 6C6F6E67 		.ascii	"long unsigned int\000"
+ 2782      20756E73 
+ 2782      69676E65 
+ 2782      6420696E 
+ 2782      7400
+ 2783              	.LASF18:
+ 2784 0429 696E7433 		.ascii	"int32_t\000"
+ 2784      325F7400 
+ 2785              	.LASF91:
+ 2786 0431 57726974 		.ascii	"Write_2046\000"
+ 2786      655F3230 
+ 2786      343600
+ 2787              	.LASF46:
+ 2788 043c 74797065 		.ascii	"type\000"
+ 2788      00
+ 2789              	.LASF3:
+ 2790 0441 756E7369 		.ascii	"unsigned char\000"
+ 2790      676E6564 
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqVWbXA.s 			page 56
+
+
+ 2790      20636861 
+ 2790      7200
+ 2791              	.LASF62:
+ 2792 044f 685F7370 		.ascii	"h_space\000"
+ 2792      61636500 
+ 2793              	.LASF71:
+ 2794 0457 785F7374 		.ascii	"x_start\000"
+ 2794      61727400 
+ 2795              	.LASF74:
+ 2796 045f 795F656E 		.ascii	"y_end\000"
+ 2796      6400
+ 2797              	.LASF54:
+ 2798 0465 7374796C 		.ascii	"style\000"
+ 2798      6500
+ 2799              	.LASF41:
+ 2800 046b 73746174 		.ascii	"state\000"
+ 2800      6500
+ 2801              	.LASF88:
+ 2802 0471 55475F47 		.ascii	"UG_GUI\000"
+ 2802      554900
+ 2803              	.LASF45:
+ 2804 0478 615F7265 		.ascii	"a_rel\000"
+ 2804      6C00
+ 2805              	.LASF60:
+ 2806 047e 55475F54 		.ascii	"UG_TOUCH\000"
+ 2806      4F554348 
+ 2806      00
+ 2807              	.LASF2:
+ 2808 0487 7369676E 		.ascii	"signed char\000"
+ 2808      65642063 
+ 2808      68617200 
+ 2809              	.LASF7:
+ 2810 0493 73686F72 		.ascii	"short unsigned int\000"
+ 2810      7420756E 
+ 2810      7369676E 
+ 2810      65642069 
+ 2810      6E7400
+ 2811              	.LASF19:
+ 2812 04a6 75696E74 		.ascii	"uint8\000"
+ 2812      3800
+ 2813              	.LASF22:
+ 2814 04ac 646F7562 		.ascii	"double\000"
+ 2814      6C6500
+ 2815              	.LASF50:
+ 2816 04b3 535F4F42 		.ascii	"S_OBJECT\000"
+ 2816      4A454354 
+ 2816      00
+ 2817              	.LASF64:
+ 2818 04bc 616C6967 		.ascii	"align\000"
+ 2818      6E00
+ 2819              	.LASF44:
+ 2820 04c2 615F6162 		.ascii	"a_abs\000"
+ 2820      7300
+ 2821              	.LASF30:
+ 2822 04c8 464F4E54 		.ascii	"FONT_TYPE_1BPP\000"
+ 2822      5F545950 
+ 2822      455F3142 
+ARM GAS  C:\Users\Sava\AppData\Local\Temp\ccqVWbXA.s 			page 57
+
+
+ 2822      505000
+ 2823              	.LASF85:
+ 2824 04d7 63686172 		.ascii	"char_h_space\000"
+ 2824      5F685F73 
+ 2824      70616365 
+ 2824      00
+ 2825              		.ident	"GCC: (GNU Tools for ARM Embedded Processors) 5.4.1 20160609 (release) [ARM/embedded-5-bran
